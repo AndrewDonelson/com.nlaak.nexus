@@ -1,0 +1,26 @@
+# Allow all crawlers
+User-agent: *
+
+# Allow
+Allow: /$
+Allow: /sitemap.xml
+Allow: /_next/static/
+
+# Disallow
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+Disallow: /user/
+Disallow: /auth/
+Disallow: /_next/
+Disallow: /constants/
+Disallow: /convex/
+Disallow: /components/
+Disallow: /lib/
+Disallow: /props/
+
+# Sitemap
+Sitemap: https://nlaak.com/sitemap.xml
+
+Crawl-delay (optional, use if you want to limit crawl rate)
+Crawl-delay: 10

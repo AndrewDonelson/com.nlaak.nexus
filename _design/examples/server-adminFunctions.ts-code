@@ -1,0 +1,53 @@
+// convex/adminFunctions.ts
+import { mutation, query } from "./_generated/server";
+import { v } from "convex/values";
+import { checkAdminStatus } from "./adminCheck";
+
+export const getAdminOnlyData = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const user = await ctx.db
+      .query("users")
+      .filter(q => q.eq(q.field("email"), identity.email))
+      .first();
+
+    if (!user) throw new Error("User not found");
+
+    const isAdmin = await checkAdminStatus(ctx, { userId: user._id });
+    if (!isAdmin) throw new Error("Unauthorized: Admin access required");
+
+    // Fetch and return admin-only data
+    const adminData = await ctx.db.query("adminOnlyData").collect();
+    return adminData;
+  },
+});
+
+export const performAdminAction = mutation({
+  args: { someArg: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const user = await ctx.db
+      .query("users")
+      .filter(q => q.eq(q.field("email"), identity.email))
+      .first();
+
+    if (!user) throw new Error("User not found");
+
+    const isAdmin = await checkAdminStatus(ctx, { userId: user._id });
+    if (!isAdmin) throw new Error("Unauthorized: Admin access required");
+
+    // Perform admin-only action
+    // For example, create a new admin-only record
+    const newRecordId = await ctx.db.insert("adminOnlyData", { 
+      data: args.someArg,
+      createdAt: new Date().getTime()
+    });
+
+    return newRecordId;
+  },
+});

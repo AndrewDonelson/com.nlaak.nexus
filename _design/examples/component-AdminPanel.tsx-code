@@ -1,0 +1,43 @@
+// components/AdminPanel.tsx
+import React from 'react';
+import { useAdminCheck } from '@/app/hooks/useAdminCheck';
+import { useQuery, useMutation } from "convex/react";
+import { api } from '@/convex/_generated/api';
+
+const AdminPanel: React.FC = () => {
+  const isAdmin = useAdminCheck();
+  const adminData = useQuery(api.adminFunctions.getAdminOnlyData);
+  const performAdminAction = useMutation(api.adminFunctions.performAdminAction);
+
+  if (!isAdmin) {
+    return <div>You do not have access to this page.</div>;
+  }
+
+  const handleAdminAction = async () => {
+    try {
+      const result = await performAdminAction({ someArg: "New admin data" });
+      console.log("Admin action performed:", result);
+    } catch (error) {
+      console.error("Error performing admin action:", error);
+    }
+  };
+
+  return (
+    <div>
+      <h1>Admin Panel</h1>
+      <h2>Admin Only Data:</h2>
+      {adminData ? (
+        <ul>
+          {adminData.map((item: any) => (
+            <li key={item._id}>{item.data}</li>
+          ))}
+        </ul>
+      ) : (
+        <p>Loading admin data...</p>
+      )}
+      <button onClick={handleAdminAction}>Perform Admin Action</button>
+    </div>
+  );
+};
+
+export default AdminPanel;
