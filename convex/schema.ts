@@ -9,19 +9,62 @@ export default defineSchema({
     userId: v.id("users"),
   }).index("by_userId", ["userId"]),
 
-  // profiles: defineTable({
-  //   userId: v.id("users"),
-  //   username: v.string(),
-  //   bio: v.optional(v.string({ maxLength: 384 })),
-  //   tags: v.optional(v.array(v.string({ maxLength: 16 }), { maxLength: 10 })),
-  //   location: v.optional(v.string({ maxLength: 48 })),
-  //   website: v.optional(v.array(v.string(), { maxLength: 3 })),
-  //   visible: v.boolean(),
-  // })
-  //   .index("by_userId", ["userId"])
-  //   .index("by_username", ["username"])
-  //   .searchIndex("search_username", {
-  //     searchField: "username",
-  //     filterFields: ["visible"],
-  //   }),  
+  players: defineTable({
+    name: v.string(),
+    description: v.string(),
+    inventory: v.array(v.string()),
+    stats: v.record(v.string(), v.number()),
+    politicalAlignment: v.object({
+      values: v.object({
+        individualLiberty: v.number(),
+        fiscalResponsibility: v.number(),
+        traditionalValues: v.number(),
+        nationalSecurity: v.number(),
+        freeMarketEconomy: v.number(),
+        constitutionalInterpretation: v.number(),
+        localAutonomy: v.number(),
+        lawEnforcement: v.number(),
+        patriotism: v.number(),
+        religiousExpression: v.number(),
+        socialEquity: v.number(),
+        environmentalProtection: v.number(),
+        governmentServices: v.number(),
+        progressiveTaxation: v.number(),
+        civilRights: v.number(),
+        weaponRegulation: v.number(),
+        multiculturalism: v.number(),
+        internationalCooperation: v.number(),
+        healthcareAccess: v.number(),
+        laborRights: v.number(),
+      }),
+      overallAlignment: v.number(),
+    }),
+    alignmentHistory: v.array(v.object({
+      timestamp: v.number(),
+      alignment: v.number(),
+    })),
+  }),
+
+  storyNodes: defineTable({
+    content: v.string(),
+    choices: v.array(v.object({
+      id: v.string(),
+      text: v.string(),
+      consequences: v.array(v.object({
+        type: v.union(v.literal('addItem'), v.literal('removeItem'), v.literal('setFlag'), v.literal('alterStat'), v.literal('changePoliticalValue')),
+        target: v.string(),
+        value: v.any(),
+      })),
+      nextNodeId: v.id("storyNodes"),
+    })),
+  }),
+
+  nexusGameSessions: defineTable({
+    playerId: v.id('players'),
+    currentNodeId: v.id('storyNodes'),
+    flags: v.record(v.string(), v.boolean()),
+    visitedNodes: v.array(v.id('storyNodes')),
+    title: v.string(),
+    version: v.string(),
+  })  
 });

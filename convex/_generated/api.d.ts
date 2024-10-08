@@ -19,6 +19,7 @@ import type * as adminCheck from "../adminCheck.js";
 import type * as auth from "../auth.js";
 import type * as helpers from "../helpers.js";
 import type * as http from "../http.js";
+import type * as nexusEngine from "../nexusEngine.js";
 import type * as otp_ResendOTP from "../otp/ResendOTP.js";
 import type * as otp_TwilioOTP from "../otp/TwilioOTP.js";
 import type * as otp_TwilioSDK from "../otp/TwilioSDK.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   helpers: typeof helpers;
   http: typeof http;
+  nexusEngine: typeof nexusEngine;
   "otp/ResendOTP": typeof otp_ResendOTP;
   "otp/TwilioOTP": typeof otp_TwilioOTP;
   "otp/TwilioSDK": typeof otp_TwilioSDK;
