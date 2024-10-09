@@ -8,7 +8,7 @@ export default defineSchema({
   admins: defineTable({
     userId: v.id("users"),
   }).index("by_userId", ["userId"]),
-
+    
   players: defineTable({
     name: v.string(),
     description: v.string(),
@@ -53,7 +53,7 @@ export default defineSchema({
       consequences: v.array(v.object({
         type: v.union(v.literal('addItem'), v.literal('removeItem'), v.literal('setFlag'), v.literal('alterStat'), v.literal('changePoliticalValue')),
         target: v.string(),
-        value: v.any(),
+        value: v.optional(v.union(v.boolean(), v.number())),
       })),
       nextNodeId: v.id("storyNodes"),
     })),
@@ -66,5 +66,5 @@ export default defineSchema({
     visitedNodes: v.array(v.id('storyNodes')),
     title: v.string(),
     version: v.string(),
-  })  
+  }),
 });

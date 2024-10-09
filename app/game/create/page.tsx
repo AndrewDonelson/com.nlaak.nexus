@@ -1,15 +1,15 @@
 "use client"
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import StoryNodeEditor from '@/components/game/StoryNodeEditor';
 import StoryNodeList from '@/components/game/StoryNodeList';
-import { StoryNode } from '@/lib/game/types';
+import { StoryNode, Choice } from '@/lib/game/types';
 
 const GameCreatePage: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<Id<"storyNodes"> | null>(null);
-  const storyNodes = useQuery(api.nexusEngine.getAllStoryNodes);
+  const storyNodes = useQuery(api.nexusEngine.getAllStoryNodes) as StoryNode[] | undefined;
   const createStoryNode = useMutation(api.nexusEngine.createStoryNode);
   const updateStoryNode = useMutation(api.nexusEngine.updateStoryNode);
   const deleteStoryNode = useMutation(api.nexusEngine.deleteStoryNode);
@@ -21,7 +21,7 @@ const GameCreatePage: React.FC = () => {
   const handleNodeCreate = async () => {
     const newNodeId = await createStoryNode({
       content: "New node content",
-      choices: []
+      choices: [] as Choice[]
     });
     setSelectedNodeId(newNodeId);
   };
@@ -46,10 +46,10 @@ const GameCreatePage: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Game Creator</h1>
-      <div className="flex">
-        <div className="w-1/3 pr-4">
+    <div className="container mx-auto p-4 mt-12">
+      <h1 className="text-3xl font-bold mb-6 text-primary">Game Creator</h1>
+      <div className="flex flex-col md:flex-row gap-6">
+        <div className="w-full md:w-1/3">
           <StoryNodeList
             nodes={storyNodes || []}
             onNodeSelect={handleNodeSelect}
@@ -57,10 +57,10 @@ const GameCreatePage: React.FC = () => {
             onNodeDelete={handleNodeDelete}
           />
         </div>
-        <div className="w-2/3">
-          {selectedNodeId && (
+        <div className="w-full md:w-2/3">
+          {selectedNodeId && storyNodes && (
             <StoryNodeEditor
-              node={storyNodes?.find(node => node._id === selectedNodeId) || null}
+              node={storyNodes.find(node => node._id === selectedNodeId) || null}
               onNodeUpdate={handleNodeUpdate}
             />
           )}

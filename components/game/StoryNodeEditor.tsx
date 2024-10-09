@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { StoryNode, Choice, Consequence } from '@/lib/game/types';
 import { Id } from '@/convex/_generated/dataModel';
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface StoryNodeEditorProps {
   node: StoryNode | null;
@@ -31,10 +36,9 @@ const StoryNodeEditor: React.FC<StoryNodeEditorProps> = ({ node, onNodeUpdate })
   const handleConsequenceChange = (choiceIndex: number, consIndex: number, field: 'type' | 'target' | 'value', value: string) => {
     const updatedChoices = [...choices];
     const updatedConsequences = [...updatedChoices[choiceIndex].consequences];
-    const consequence = updatedConsequences[consIndex];
+    const consequence = updatedConsequences[consIndex] as Consequence;
 
     if (field === 'type') {
-      // Reset the consequence when changing type
       if (value === 'addItem' || value === 'removeItem') {
         updatedConsequences[consIndex] = { type: value, target: '' };
       } else if (value === 'setFlag') {
@@ -72,92 +76,106 @@ const StoryNodeEditor: React.FC<StoryNodeEditorProps> = ({ node, onNodeUpdate })
     }
   };
 
-  if (!node) return <div>No node selected</div>;
+  if (!node) return <div className="text-muted-foreground">No node selected</div>;
 
   return (
-    <div className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
-      <h2 className="text-xl font-bold mb-4">Edit Story Node</h2>
-      <div className="mb-4">
-        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="content">
-          Content
-        </label>
-        <textarea
-          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-          id="content"
-          value={content}
-          onChange={handleContentChange}
-          rows={4}
-        />
-      </div>
-      <div className="mb-4">
-        <h3 className="text-lg font-bold mb-2">Choices</h3>
-        {choices.map((choice, index) => (
-          <div key={choice.id} className="mb-4 p-4 border rounded">
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-2 leading-tight focus:outline-none focus:shadow-outline"
-              value={choice.text}
-              onChange={(e) => handleChoiceChange(index, 'text', e.target.value)}
-              placeholder="Choice text"
+    <Card>
+      <CardHeader>
+        <CardTitle>Edit Story Node</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1" htmlFor="content">
+              Content
+            </label>
+            <Textarea
+              id="content"
+              value={content}
+              onChange={handleContentChange}
+              rows={4}
+              className="w-full"
             />
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-2 leading-tight focus:outline-none focus:shadow-outline"
-              value={choice.nextNodeId}
-              onChange={(e) => handleChoiceChange(index, 'nextNodeId', e.target.value)}
-              placeholder="Next node ID"
-            />
-            <h4 className="text-md font-bold mb-2">Consequences</h4>
-            {choice.consequences.map((cons, consIndex) => (
-              <div key={consIndex} className="mb-2">
-                <select
-                  className="shadow border rounded py-2 px-3 text-gray-700 mb-2 leading-tight focus:outline-none focus:shadow-outline"
-                  value={cons.type}
-                  onChange={(e) => handleConsequenceChange(index, consIndex, 'type', e.target.value)}
-                >
-                  <option value="addItem">Add Item</option>
-                  <option value="removeItem">Remove Item</option>
-                  <option value="setFlag">Set Flag</option>
-                  <option value="alterStat">Alter Stat</option>
-                  <option value="changePoliticalValue">Change Political Value</option>
-                </select>
-                <input
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-2 leading-tight focus:outline-none focus:shadow-outline"
-                  value={cons.target}
-                  onChange={(e) => handleConsequenceChange(index, consIndex, 'target', e.target.value)}
-                  placeholder="Target"
-                />
-                {(cons.type === 'setFlag' || cons.type === 'alterStat' || cons.type === 'changePoliticalValue') && (
-                  <input
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-2 leading-tight focus:outline-none focus:shadow-outline"
-                    value={'value' in cons ? cons.value.toString() : ''}
-                    onChange={(e) => handleConsequenceChange(index, consIndex, 'value', e.target.value)}
-                    placeholder="Value"
-                    type={cons.type === 'setFlag' ? 'checkbox' : 'number'}
-                  />
-                )}
-              </div>
-            ))}
-            <button
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-              onClick={() => handleAddConsequence(index)}
-            >
-              Add Consequence
-            </button>
           </div>
-        ))}
-        <button
-          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-          onClick={handleAddChoice}
-        >
-          Add Choice
-        </button>
-      </div>
-      <button
-        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-        onClick={handleSave}
-      >
-        Save Node
-      </button>
-    </div>
+          <div>
+            <h3 className="text-lg font-semibold mb-2">Choices</h3>
+            {choices.map((choice, index) => (
+              <Card key={choice.id} className="mb-4">
+                <CardContent className="space-y-2">
+                  <Input
+                    value={choice.text}
+                    onChange={(e) => handleChoiceChange(index, 'text', e.target.value)}
+                    placeholder="Choice text"
+                    className="mb-2"
+                  />
+                  <Input
+                    value={choice.nextNodeId}
+                    onChange={(e) => handleChoiceChange(index, 'nextNodeId', e.target.value)}
+                    placeholder="Next node ID"
+                    className="mb-2"
+                  />
+                  <h4 className="text-md font-semibold mb-2">Consequences</h4>
+                  {choice.consequences.map((cons, consIndex) => (
+                    <div key={consIndex} className="space-y-2">
+                      <Select
+                        onValueChange={(value) => handleConsequenceChange(index, consIndex, 'type', value)}
+                        defaultValue={cons.type}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select consequence type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="addItem">Add Item</SelectItem>
+                          <SelectItem value="removeItem">Remove Item</SelectItem>
+                          <SelectItem value="setFlag">Set Flag</SelectItem>
+                          <SelectItem value="alterStat">Alter Stat</SelectItem>
+                          <SelectItem value="changePoliticalValue">Change Political Value</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={cons.target}
+                        onChange={(e) => handleConsequenceChange(index, consIndex, 'target', e.target.value)}
+                        placeholder="Target"
+                        className="mb-2"
+                      />
+                      {(cons.type === 'setFlag' || cons.type === 'alterStat' || cons.type === 'changePoliticalValue') && (
+                        <Input
+                          value={'value' in cons ? cons.value.toString() : ''}
+                          onChange={(e) => handleConsequenceChange(index, consIndex, 'value', e.target.value)}
+                          placeholder="Value"
+                          type={cons.type === 'setFlag' ? 'checkbox' : 'number'}
+                          className="mb-2"
+                        />
+                      )}
+                    </div>
+                  ))}
+                  <Button
+                    variant="outline"
+                    onClick={() => handleAddConsequence(index)}
+                    className="mt-2"
+                  >
+                    Add Consequence
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+            <Button
+              variant="outline"
+              onClick={handleAddChoice}
+              className="mt-4"
+            >
+              Add Choice
+            </Button>
+          </div>
+          <Button
+            onClick={handleSave}
+            className="mt-4"
+          >
+            Save Node
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

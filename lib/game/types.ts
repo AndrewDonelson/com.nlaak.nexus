@@ -34,17 +34,17 @@ export interface AlignmentHistoryPoint {
 }
 
 export interface Player {
-  _id: Id<"players">;
-  name: string;
-  description: string;
-  inventory: string[];
-  stats: Record<string, number>;
-  politicalAlignment: PoliticalAlignment;
-  alignmentHistory: AlignmentHistoryPoint[];
-}
+    _id: Id<"players">;
+    name: string;
+    description: string;
+    inventory: string[];
+    stats: Record<string, number>;
+    politicalAlignment: PoliticalAlignment;
+    alignmentHistory: AlignmentHistoryPoint[];
+  }
 
-export type Consequence =
-  | { type: 'addItem' | 'removeItem'; target: string }
+export type Consequence = 
+  | { type: 'addItem' | 'removeItem'; target: string; value?: never }
   | { type: 'setFlag'; target: string; value: boolean }
   | { type: 'alterStat' | 'changePoliticalValue'; target: string; value: number };
 
@@ -62,11 +62,11 @@ export interface StoryNode {
 }
 
 export interface NexusGameSession {
-  _id: Id<"nexusGameSessions">;
-  playerId: Id<"players">;
-  currentNodeId: Id<"storyNodes">;
-  flags: Record<string, boolean>;
-  visitedNodes: Id<"storyNodes">[];
-  title: string;
-  version: string;
-}
+    _id: Id<"nexusGameSessions">;
+    playerId: Id<"players">;
+    currentNodeId: Id<"storyNodes">;
+    flags: Record<string, boolean>;
+    visitedNodes: Id<"storyNodes">[];
+    title: string;
+    version: string;
+  }
