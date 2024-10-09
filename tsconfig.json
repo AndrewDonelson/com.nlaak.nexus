@@ -32,7 +32,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "tailwind.config.ts"
-, "_design/examples/component-AdminPanel.tsx-code", "_design/examples/server-adminFunctions.ts-code"  ],
+    "tailwind.config.ts",
+    "_design/examples/component-AdminPanel.tsx-code", "_design/examples/server-adminFunctions.ts-code"  ],
   "exclude": ["node_modules"]
 }

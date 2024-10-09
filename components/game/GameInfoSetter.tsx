@@ -43,9 +43,9 @@ const GameInfoSetter: React.FC<GameInfoSetterProps> = ({ onInfoSet }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label htmlFor="genre" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+    <form onSubmit={handleSubmit} className="space-y-4 p-4 bg-background text-foreground rounded-lg shadow-md animate-in fade-in duration-300">
+      <div className="space-y-2">
+        <label htmlFor="genre" className="block text-sm font-medium">
           Genre
         </label>
         <Input
@@ -55,10 +55,11 @@ const GameInfoSetter: React.FC<GameInfoSetterProps> = ({ onInfoSet }) => {
           value={gameInfo.genre}
           onChange={handleChange}
           required
+          className="w-full animate-in slide-in-from-left duration-300"
         />
       </div>
-      <div>
-        <label htmlFor="theme" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <div className="space-y-2">
+        <label htmlFor="theme" className="block text-sm font-medium">
           Theme
         </label>
         <Input
@@ -68,10 +69,11 @@ const GameInfoSetter: React.FC<GameInfoSetterProps> = ({ onInfoSet }) => {
           value={gameInfo.theme}
           onChange={handleChange}
           required
+          className="w-full animate-in slide-in-from-right duration-300"
         />
       </div>
-      <div>
-        <label htmlFor="additionalInfo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <div className="space-y-2">
+        <label htmlFor="additionalInfo" className="block text-sm font-medium">
           Additional Information
         </label>
         <Input
@@ -80,9 +82,10 @@ const GameInfoSetter: React.FC<GameInfoSetterProps> = ({ onInfoSet }) => {
           name="additionalInfo"
           value={gameInfo.additionalInfo}
           onChange={handleChange}
+          className="w-full animate-in slide-in-from-bottom duration-300"
         />
       </div>
-      <Button type="submit">Set Game Information</Button>
+      <Button type="submit" className="w-full animate-in zoom-in duration-300">Set Game Information</Button>
     </form>
   );
 };

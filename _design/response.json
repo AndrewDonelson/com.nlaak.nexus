@@ -1,0 +1,25 @@
+{
+    "id": "2d53caff-5f42-4b03-96bc-347bf6d7ed20",
+    "model": "llama-3.1-sonar-small-128k-online",
+    "created": 1728495533,
+    "usage": {
+        "prompt_tokens": 204,
+        "completion_tokens": 350,
+        "total_tokens": 554
+    },
+    "object": "chat.completion",
+    "choices": [
+        {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+                "role": "assistant",
+                "content": "```json\n{\n    \"title\": \"Mars Colonization Odyssey\",\n    \"mainPlot\": \"Elan Mosk, a brilliant and ambitious scientist, dreams of building a space company to colonize Mars. The story begins in 1999 with Elan sitting in front of a PC, programming and planning his future. As the years pass, Elan faces numerous challenges, including financial struggles, personal losses, and technological setbacks. Despite these obstacles, he perseveres, driven by his vision of humanity's future on Mars. The game follows Elan's journey as he builds his company, faces external conflicts, and makes crucial decisions that shape the fate of his mission.\",\n    \"keyCharacters\": [\n        {\n            \"name\": \"Elan Mosk\",\n            \"description\": \"The protagonist, a brilliant and ambitious scientist with a dream to colonize Mars.\"\n        },\n        {\n            \"name\": \"Dr. Rachel Kim\",\n            \"description\": \"A skilled engineer who joins Elan's company and becomes a key ally in the mission to Mars.\"\n        },\n        {\n            \"name\": \"Senator James Reed\",\n            \"description\": \"A powerful politician who supports Elan's mission but has his own agenda that often clashes with Elan's vision.\"\n        }\n    ],\n    \"majorStoryBeats\": [\n        \"Elan's initial vision and planning in 1999\",\n        \"Securing funding and building the first Mars-bound spacecraft\",\n        \"Overcoming technological challenges and personal losses during the mission\",\n        \"Facing external conflicts from rival space companies and political adversaries\",\n        \"Making crucial decisions that shape the fate of the mission\",\n        \"Arriving on Mars and establishing the first human settlement\"\n    ]\n}\n```"
+            },
+            "delta": {
+                "role": "assistant",
+                "content": ""
+            }
+        }
+    ]
+}

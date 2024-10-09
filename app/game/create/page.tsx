@@ -8,28 +8,23 @@ import StoryNodeList from '@/components/game/StoryNodeList';
 import MapSizeSelector from '@/components/game/MapSizeSelector';
 import MapComponent from '@/components/game/MapComponent';
 import GameInfoSetter from '@/components/game/GameInfoSetter';
+//import WorldGenerator from '@/components/game/WorldGenerator';
 import { StoryNode } from '@/lib/game/types';
+import { Button } from '@/components/ui/button';
+import WorldGeneratorDebug from '@/components/game/WorldGeneratorDebug';
 
 const GameCreatePage: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<Id<"storyNodes"> | null>(null);
   const [mapSize, setMapSize] = useState<number>(10);
   const [gameInfo, setGameInfo] = useState({ genre: '', theme: '', additionalInfo: '' });
+  const [generationProgress, setGenerationProgress] = useState<number>(0);
   
   const storyNodes = useQuery(api.nexusEngine.getAllStoryNodes) as StoryNode[] | undefined;
-  const createStoryNode = useMutation(api.nexusEngine.createStoryNode);
   const updateStoryNode = useMutation(api.nexusEngine.updateStoryNode);
   const deleteStoryNode = useMutation(api.nexusEngine.deleteStoryNode);
 
   const handleNodeSelect = (nodeId: string) => {
     setSelectedNodeId(nodeId as Id<"storyNodes">);
-  };
-
-  const handleNodeCreate = async () => {
-    const newNodeId = await createStoryNode({
-      content: "New node content",
-      choices: []
-    });
-    setSelectedNodeId(newNodeId);
   };
 
   const handleNodeUpdate = async (updatedNode: StoryNode) => {
@@ -38,7 +33,10 @@ const GameCreatePage: React.FC = () => {
         nodeId: selectedNodeId,
         updates: {
           content: updatedNode.content,
-          choices: updatedNode.choices
+          choices: updatedNode.choices,
+          terrain: updatedNode.terrain,
+          x: updatedNode.x,
+          y: updatedNode.y
         }
       });
     }
@@ -57,21 +55,48 @@ const GameCreatePage: React.FC = () => {
       
       <GameInfoSetter onInfoSet={setGameInfo} />
       
-      <MapSizeSelector onSizeChange={setMapSize} />
+      <div className="mt-4">
+        <MapSizeSelector onSizeChange={setMapSize} />
+      </div>
       
-      <div className="flex flex-col md:flex-row gap-6">
-        <div className="w-full md:w-1/2">
+      <div className="mt-4">
+        {/* <WorldGenerator
+          gameInfo={gameInfo}
+          mapSize={mapSize}
+          onProgress={setGenerationProgress}
+        /> */}
+
+        <WorldGeneratorDebug
+        gameInfo={{
+            genre: "Sci-Fi",
+            theme: "Elan Mosk, a brilliant wants to build a space company to colonize mars",
+            additionalInfo: "The story starts with Elan sitting in from of a PC programming in the year 1999"
+        }}
+        onProgress={(progress) => console.log(`Generation progress: ${progress}%`)}
+        />        
+      </div>
+      
+      {generationProgress > 0 && generationProgress < 100 && (
+        <div className="mt-4">
+          <progress value={generationProgress} max={100} className="w-full" />
+          <p>{Math.round(generationProgress)}% complete</p>
+        </div>
+      )}
+      
+      <div className="flex flex-col lg:flex-row gap-6 mt-6">
+        <div className="w-full lg:w-1/2">
           <MapComponent 
             size={mapSize}
             nodes={storyNodes || []}
             onNodeClick={handleNodeSelect}
+            isGenerating={generationProgress > 0 && generationProgress < 100}
+            generationProgress={generationProgress}
           />
         </div>
-        <div className="w-full md:w-1/2">
+        <div className="w-full lg:w-1/2">
           <StoryNodeList
             nodes={storyNodes || []}
             onNodeSelect={handleNodeSelect}
-            onNodeCreate={handleNodeCreate}
             onNodeDelete={handleNodeDelete}
           />
         </div>

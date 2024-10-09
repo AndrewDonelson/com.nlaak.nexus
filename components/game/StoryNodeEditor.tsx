@@ -109,7 +109,7 @@ const StoryNodeEditor: React.FC<StoryNodeEditorProps> = ({ node, onNodeUpdate })
                     className="mb-2"
                   />
                   <Input
-                    value={choice.nextNodeId}
+                    value={choice.nextNodeId || ''}
                     onChange={(e) => handleChoiceChange(index, 'nextNodeId', e.target.value)}
                     placeholder="Next node ID"
                     className="mb-2"
@@ -158,8 +158,7 @@ const StoryNodeEditor: React.FC<StoryNodeEditorProps> = ({ node, onNodeUpdate })
                   </Button>
                 </CardContent>
               </Card>
-            ))}
-            <Button
+            ))}            <Button
               variant="outline"
               onClick={handleAddChoice}
               className="mt-4"

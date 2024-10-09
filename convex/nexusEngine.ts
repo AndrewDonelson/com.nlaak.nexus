@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { Id } from "./_generated/dataModel";
 import { PoliticalValues } from "@/lib/game/types";
 
 export const getPlayer = query({
@@ -86,6 +87,44 @@ export const createNexusGameSession = mutation({
   },
 });
 
+export const updatePoliticalAlignment = mutation({
+  args: {
+    playerId: v.id("players"),
+    changes: v.record(v.string(), v.number()),
+  },
+  handler: async (ctx, args) => {
+    const player = await ctx.db.get(args.playerId);
+    if (!player) throw new Error("Player not found");
+
+    const newValues = { ...player.politicalAlignment.values };
+    let changeSum = 0;
+    let changeCount = 0;
+
+    Object.entries(args.changes).forEach(([key, change]) => {
+      if (key in newValues && typeof change === 'number') {
+        const typedKey = key as keyof PoliticalValues;
+        newValues[typedKey] = Math.max(0, Math.min(100, newValues[typedKey] + change));
+        changeSum += change;
+        changeCount++;
+      }
+    });
+
+    const averageChange = changeCount > 0 ? changeSum / changeCount : 0;
+    const newOverallAlignment = Math.max(-100, Math.min(100, player.politicalAlignment.overallAlignment + averageChange));
+
+    await ctx.db.patch(args.playerId, {
+      politicalAlignment: {
+        values: newValues,
+        overallAlignment: newOverallAlignment,
+      },
+      alignmentHistory: [
+        ...player.alignmentHistory,
+        { timestamp: Date.now(), alignment: newOverallAlignment }
+      ],
+    });
+  },
+});
+
 export const makeChoice = mutation({
   args: {
     sessionId: v.id("nexusGameSessions"),
@@ -145,48 +184,12 @@ export const makeChoice = mutation({
     }
 
     // Move to the next node
-    await ctx.db.patch(args.sessionId, {
-      currentNodeId: choice.nextNodeId,
-      visitedNodes: [...session.visitedNodes, choice.nextNodeId],
-    });
-  },
-});
-
-export const updatePoliticalAlignment = mutation({
-  args: {
-    playerId: v.id("players"),
-    changes: v.record(v.string(), v.number()),
-  },
-  handler: async (ctx, args) => {
-    const player = await ctx.db.get(args.playerId);
-    if (!player) throw new Error("Player not found");
-
-    const newValues = { ...player.politicalAlignment.values };
-    let changeSum = 0;
-    let changeCount = 0;
-
-    Object.entries(args.changes).forEach(([key, change]) => {
-      if (key in newValues && typeof change === 'number') {
-        const typedKey = key as keyof PoliticalValues;
-        newValues[typedKey] = Math.max(0, Math.min(100, newValues[typedKey] + change));
-        changeSum += change;
-        changeCount++;
-      }
-    });
-
-    const averageChange = changeCount > 0 ? changeSum / changeCount : 0;
-    const newOverallAlignment = Math.max(-100, Math.min(100, player.politicalAlignment.overallAlignment + averageChange));
-
-    await ctx.db.patch(args.playerId, {
-      politicalAlignment: {
-        values: newValues,
-        overallAlignment: newOverallAlignment,
-      },
-      alignmentHistory: [
-        ...player.alignmentHistory,
-        { timestamp: Date.now(), alignment: newOverallAlignment }
-      ],
-    });
+    if (choice.nextNodeId) {
+      await ctx.db.patch(args.sessionId, {
+        currentNodeId: choice.nextNodeId,
+        visitedNodes: [...session.visitedNodes, choice.nextNodeId],
+      });
+    }
   },
 });
 
@@ -215,46 +218,37 @@ export const updateNexusGameSession = mutation({
 
 export const createStoryNode = mutation({
   args: {
-    content: v.string(),
+    content: v.union(v.string(), v.object({})),
     choices: v.array(v.object({
       id: v.string(),
       text: v.string(),
       consequences: v.array(v.object({
         type: v.union(v.literal('addItem'), v.literal('removeItem'), v.literal('setFlag'), v.literal('alterStat'), v.literal('changePoliticalValue')),
         target: v.string(),
-        value: v.optional(v.union(v.boolean(), v.number())),
+        value: v.optional(v.union(v.number(), v.boolean())),
+        description: v.optional(v.string())
       })),
-      nextNodeId: v.id("storyNodes"),
+      nextNodeId: v.optional(v.union(v.id("storyNodes"), v.null()))
     })),
+    x: v.number(),
+    y: v.number(),
+    terrain: v.string()
   },
   handler: async (ctx, args) => {
     const nodeId = await ctx.db.insert("storyNodes", {
-      content: args.content,
-      choices: args.choices,
+      content: typeof args.content === 'string' ? args.content : JSON.stringify(args.content),
+      choices: args.choices.map(choice => ({
+        ...choice,
+        consequences: choice.consequences.map(consequence => ({
+          ...consequence,
+          value: typeof consequence.value === 'boolean' ? (consequence.value ? 1 : 0) : consequence.value
+        }))
+      })),
+      x: args.x,
+      y: args.y,
+      terrain: args.terrain
     });
     return nodeId;
-  },
-});
-
-export const updateStoryNode = mutation({
-  args: {
-    nodeId: v.id("storyNodes"),
-    updates: v.object({
-      content: v.optional(v.string()),
-      choices: v.optional(v.array(v.object({
-        id: v.string(),
-        text: v.string(),
-        consequences: v.array(v.object({
-          type: v.union(v.literal('addItem'), v.literal('removeItem'), v.literal('setFlag'), v.literal('alterStat'), v.literal('changePoliticalValue')),
-          target: v.string(),
-          value: v.optional(v.union(v.boolean(), v.number())),
-        })),
-        nextNodeId: v.id("storyNodes"),
-      }))),
-    }),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.nodeId, args.updates);
   },
 });
 
@@ -268,5 +262,79 @@ export const deleteStoryNode = mutation({
   args: { nodeId: v.id("storyNodes") },
   handler: async (ctx, args) => {
     await ctx.db.delete(args.nodeId);
+  },
+});
+
+export const updateStoryNode = mutation({
+  args: {
+    nodeId: v.id("storyNodes"),
+    updates: v.object({
+      content: v.optional(v.union(v.string(), v.object({}))),
+      choices: v.optional(v.array(v.object({
+        id: v.string(),
+        text: v.string(),
+        consequences: v.array(v.object({
+          type: v.union(v.literal('addItem'), v.literal('removeItem'), v.literal('setFlag'), v.literal('alterStat'), v.literal('changePoliticalValue')),
+          target: v.string(),
+          value: v.optional(v.union(v.number(), v.boolean())),
+          description: v.optional(v.string())
+        })),
+        nextNodeId: v.optional(v.union(v.id("storyNodes"), v.null()))
+      }))),
+      x: v.optional(v.number()),
+      y: v.optional(v.number()),
+      terrain: v.optional(v.string())
+    }),
+  },
+  handler: async (ctx, args) => {
+    const updates = {
+      ...args.updates,
+      content: typeof args.updates.content === 'object' 
+        ? JSON.stringify(args.updates.content) 
+        : args.updates.content,
+      choices: args.updates.choices?.map(choice => ({
+        ...choice,
+        consequences: choice.consequences.map(consequence => ({
+          ...consequence,
+          value: typeof consequence.value === 'boolean' ? (consequence.value ? 1 : 0) : consequence.value
+        }))
+      }))
+    };
+    await ctx.db.patch(args.nodeId, updates);
+  },
+});
+
+export const createGameStory = mutation({
+  args: {
+    title: v.string(),
+    mainPlot: v.string(),
+    keyCharacters: v.array(v.object({
+      name: v.string(),
+      description: v.string(),
+    })),
+    majorStoryBeats: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const storyId = await ctx.db.insert("gameStories", args);
+    return storyId;
+  },
+});
+
+export const createWorldDetails = mutation({
+  args: {
+    gameStoryId: v.id("gameStories"),
+    locations: v.array(v.object({
+      name: v.string(),
+      description: v.string(),
+      pointsOfInterest: v.array(v.string()),
+    })),
+    environments: v.array(v.object({
+      type: v.string(),
+      description: v.string(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const worldDetailsId = await ctx.db.insert("worldDetails", args);
+    return worldDetailsId;
   },
 });

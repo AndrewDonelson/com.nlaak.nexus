@@ -2,47 +2,28 @@ import React from 'react';
 import { StoryNode } from '@/lib/game/types';
 import { Id } from '@/convex/_generated/dataModel';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-/**
- * Defines the props for the `StoryNodeList` component, which renders a list of story nodes.
- *
- * @param nodes - An array of `StoryNode` objects representing the story nodes to be displayed.
- * @param onNodeSelect - A function that is called when a story node is selected, with the ID of the selected node as an argument.
- * @param onNodeCreate - A function that is called when the "Create New Node" button is clicked.
- * @param onNodeDelete - A function that is called when the "Delete" button for a story node is clicked, with the ID of the node to be deleted as an argument.
- */
 interface StoryNodeListProps {
   nodes: StoryNode[];
   onNodeSelect: (nodeId: Id<"storyNodes">) => void;
-  onNodeCreate: () => void;
   onNodeDelete: (nodeId: Id<"storyNodes">) => void;
 }
 
-/**
- * Renders a list of story nodes, allowing the user to select, create, and delete nodes.
- *
- * @param nodes - An array of `StoryNode` objects representing the story nodes to be displayed.
- * @param onNodeSelect - A function that is called when a story node is selected, with the ID of the selected node as an argument.
- * @param onNodeCreate - A function that is called when the "Create New Node" button is clicked.
- * @param onNodeDelete - A function that is called when the "Delete" button for a story node is clicked, with the ID of the node to be deleted as an argument.
- */
-const StoryNodeList: React.FC<StoryNodeListProps> = ({ nodes, onNodeSelect, onNodeCreate, onNodeDelete }) => {
+const StoryNodeList: React.FC<StoryNodeListProps> = ({ nodes, onNodeSelect, onNodeDelete }) => {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Story Nodes</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="bg-card text-card-foreground shadow-md rounded px-4 py-3">
+      <h2 className="text-xl font-bold mb-4">Story Nodes</h2>
+      <ScrollArea className="h-[400px] pr-4">
         <ul className="space-y-2">
           {nodes.map((node) => (
-            <li key={node._id} className="flex justify-between items-center">
+            <li key={node._id} className="flex justify-between items-center p-2 bg-background rounded hover:bg-accent transition-colors">
               <Button
                 variant="ghost"
-                className="text-left truncate"
+                className="text-left truncate flex-grow mr-2"
                 onClick={() => onNodeSelect(node._id)}
               >
-                {node.content.substring(0, 30)}...
+                {node.content ? node.content.substring(0, 30) + '...' : 'No content'}
               </Button>
               <Button
                 variant="destructive"
@@ -54,15 +35,8 @@ const StoryNodeList: React.FC<StoryNodeListProps> = ({ nodes, onNodeSelect, onNo
             </li>
           ))}
         </ul>
-        <Button
-          variant="outline"
-          onClick={onNodeCreate}
-          className="mt-4 w-full"
-        >
-          Create New Node
-        </Button>
-      </CardContent>
-    </Card>
+      </ScrollArea>
+    </div>
   );
 };
 
