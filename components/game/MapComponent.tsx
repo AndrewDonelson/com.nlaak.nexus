@@ -1,80 +1,76 @@
-import React, { useState } from 'react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import React from 'react';
+import { Id } from '@/convex/_generated/dataModel';
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { StoryNode } from '@/lib/game/types';
 
-interface MapComponentProps {
-  size: number;
-  nodes: StoryNode[];
-  onNodeClick: (nodeId: string) => void;
-  isGenerating: boolean;
-  generationProgress: number;
+interface ConvexStoryNode {
+  _id: Id<"storyNodes">;
+  content: string;
+  choices: {
+    id: string;
+    text: string;
+    nextNodeId?: Id<"storyNodes"> | null;
+    consequences: Array<{
+      type: string;
+      target: string;
+      value?: number;
+      description?: string;
+    }>;
+  }[];
 }
 
-const terrainColors: Record<string, string> = {
-  plains: 'bg-green-300',
-  forest: 'bg-green-600',
-  mountains: 'bg-gray-500',
-  desert: 'bg-yellow-300',
-  snow: 'bg-white',
-  water: 'bg-blue-400',
-  // Add more terrain types and colors as needed
-};
+interface MapComponentProps {
+  nodes: ConvexStoryNode[];
+  currentNodeId: Id<"storyNodes"> | null;
+  onNodeClick: (nodeId: Id<"storyNodes">) => void;
+}
 
-const MapComponent: React.FC<MapComponentProps> = ({ size, nodes, onNodeClick, isGenerating, generationProgress }) => {
-  const [hoveredNode, setHoveredNode] = useState<StoryNode | null>(null);
+const MapComponent: React.FC<MapComponentProps> = ({ nodes, currentNodeId, onNodeClick }) => {
+  const nodeMap = new Map(nodes.map(node => [node._id, node]));
 
-  const cellSize = 16; // px
-  const mapSizePx = size * cellSize;
+  const renderNode = (nodeId: Id<"storyNodes">, depth: number = 0, visited: Set<Id<"storyNodes">> = new Set()) => {
+    if (depth > 5 || visited.has(nodeId)) return null; // Limit depth and prevent cycles
+    visited.add(nodeId);
 
-  return (
-    <ScrollArea className="h-[400px] w-full border rounded">
-      <div 
-        style={{ width: `${mapSizePx}px`, height: `${mapSizePx}px` }}
-        className="relative bg-background"
-      >
-        {nodes.map((node, index) => {
-          const x = node.x * cellSize;
-          const y = node.y * cellSize;
-          const terrainClass = terrainColors[node.terrain] || 'bg-gray-300';
-          return (
-            <TooltipProvider key={node._id}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    className={`absolute ${terrainClass} hover:opacity-80 cursor-pointer transition-colors duration-200 ease-in-out animate-in fade-in-50`}
-                    style={{
-                      left: `${x}px`,
-                      top: `${y}px`,
-                      width: `${cellSize}px`,
-                      height: `${cellSize}px`,
-                    }}
-                    onClick={() => onNodeClick(node._id)}
-                    onMouseEnter={() => setHoveredNode(node)}
-                    onMouseLeave={() => setHoveredNode(null)}
-                  />
-                </TooltipTrigger>
-                <TooltipContent className="bg-popover text-popover-foreground animate-in fade-in-0 zoom-in-95">
-                  <p className="text-sm">{node.content.substring(0, 50)}...</p>
-                  <p className="text-xs text-muted-foreground">Terrain: {node.terrain}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        })}
-        {isGenerating && (
-          <div 
-            className="absolute bg-primary opacity-30"
-            style={{
-              left: 0,
-              top: 0,
-              width: `${(generationProgress / (size * size)) * 100}%`,
-              height: '100%',
-              transition: 'width 0.5s ease-in-out',
-            }}
-          />
+    const node = nodeMap.get(nodeId);
+    if (!node) return null;
+
+    const isCurrentNode = node._id === currentNodeId;
+    const hasChildren = node.choices.some(choice => choice.nextNodeId);
+
+    return (
+      <div key={node._id} style={{ marginLeft: `${depth * 20}px` }}>
+        <div
+          className={`p-2 mb-2 rounded cursor-pointer ${
+            isCurrentNode ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-secondary-foreground'
+          }`}
+          onClick={() => onNodeClick(node._id)}
+        >
+          {node.content.substring(0, 30)}...
+        </div>
+        {hasChildren && (
+          <div>
+            {node.choices.map(choice => 
+              choice.nextNodeId && renderNode(choice.nextNodeId, depth + 1, new Set(visited))
+            )}
+          </div>
         )}
       </div>
+    );
+  };
+
+  const renderTree = () => {
+    try {
+      if (nodes.length === 0) return <div>No nodes available</div>;
+      return renderNode(nodes[0]._id);
+    } catch (error) {
+      console.error("Error rendering node tree:", error);
+      return <div>Error rendering map</div>;
+    }
+  };
+
+  return (
+    <ScrollArea className="h-[300px] w-[200px]">
+      {renderTree()}
     </ScrollArea>
   );
 };
