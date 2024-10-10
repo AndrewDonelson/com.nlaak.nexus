@@ -1,7 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
-import { PoliticalValues } from "@/lib/game/types";
+import { PoliticalValues, StorySize } from "@/lib/game/types";
 
 export const getPlayer = query({
   args: { playerId: v.id("players") },
@@ -189,36 +189,41 @@ export const makeChoice = mutation({
         currentNodeId: choice.nextNodeId,
         visitedNodes: [...session.visitedNodes, choice.nextNodeId],
       });
+      await ctx.db.patch(choice.nextNodeId, {
+        visitCount: (await ctx.db.get(choice.nextNodeId))!.visitCount + 1,
+      });
     }
   },
 });
 
-export const getAlignmentColor = query({
-  args: { alignment: v.number() },
-  handler: (ctx, args) => {
-    const redComponent = Math.max(0, Math.min(255, Math.round(128 + (args.alignment * 1.28))));
-    const blueComponent = Math.max(0, Math.min(255, Math.round(128 - (args.alignment * 1.28))));
-    return `rgb(${redComponent}, 0, ${blueComponent})`;
-  },
-});
-
-export const updateNexusGameSession = mutation({
+export const goBack = mutation({
   args: {
     sessionId: v.id("nexusGameSessions"),
-    updates: v.object({
-      currentNodeId: v.optional(v.id("storyNodes")),
-      flags: v.optional(v.record(v.string(), v.boolean())),
-      visitedNodes: v.optional(v.array(v.id("storyNodes"))),
-    }),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.sessionId, args.updates);
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) throw new Error("Game session not found");
+
+    const currentNode = await ctx.db.get(session.currentNodeId);
+    if (!currentNode) throw new Error("Current story node not found");
+
+    if (currentNode.parentNodeId) {
+      await ctx.db.patch(args.sessionId, {
+        currentNodeId: currentNode.parentNodeId,
+        visitedNodes: [...session.visitedNodes, currentNode.parentNodeId],
+      });
+      await ctx.db.patch(currentNode.parentNodeId, {
+        visitCount: (await ctx.db.get(currentNode.parentNodeId))!.visitCount + 1,
+      });
+    } else {
+      throw new Error("Cannot go back from the root node");
+    }
   },
 });
 
 export const createStoryNode = mutation({
   args: {
-    content: v.union(v.string(), v.object({})),
+    content: v.string(),
     choices: v.array(v.object({
       id: v.string(),
       text: v.string(),
@@ -230,23 +235,14 @@ export const createStoryNode = mutation({
       })),
       nextNodeId: v.optional(v.union(v.id("storyNodes"), v.null()))
     })),
-    x: v.number(),
-    y: v.number(),
-    terrain: v.string()
+    parentNodeId: v.optional(v.union(v.id("storyNodes"), v.null())),
   },
   handler: async (ctx, args) => {
     const nodeId = await ctx.db.insert("storyNodes", {
-      content: typeof args.content === 'string' ? args.content : JSON.stringify(args.content),
-      choices: args.choices.map(choice => ({
-        ...choice,
-        consequences: choice.consequences.map(consequence => ({
-          ...consequence,
-          value: typeof consequence.value === 'boolean' ? (consequence.value ? 1 : 0) : consequence.value
-        }))
-      })),
-      x: args.x,
-      y: args.y,
-      terrain: args.terrain
+      content: args.content,
+      choices: args.choices,
+      parentNodeId: args.parentNodeId,
+      visitCount: 0,
     });
     return nodeId;
   },
@@ -255,52 +251,6 @@ export const createStoryNode = mutation({
 export const getAllStoryNodes = query({
   handler: async (ctx) => {
     return await ctx.db.query("storyNodes").collect();
-  },
-});
-
-export const deleteStoryNode = mutation({
-  args: { nodeId: v.id("storyNodes") },
-  handler: async (ctx, args) => {
-    await ctx.db.delete(args.nodeId);
-  },
-});
-
-export const updateStoryNode = mutation({
-  args: {
-    nodeId: v.id("storyNodes"),
-    updates: v.object({
-      content: v.optional(v.union(v.string(), v.object({}))),
-      choices: v.optional(v.array(v.object({
-        id: v.string(),
-        text: v.string(),
-        consequences: v.array(v.object({
-          type: v.union(v.literal('addItem'), v.literal('removeItem'), v.literal('setFlag'), v.literal('alterStat'), v.literal('changePoliticalValue')),
-          target: v.string(),
-          value: v.optional(v.union(v.number(), v.boolean())),
-          description: v.optional(v.string())
-        })),
-        nextNodeId: v.optional(v.union(v.id("storyNodes"), v.null()))
-      }))),
-      x: v.optional(v.number()),
-      y: v.optional(v.number()),
-      terrain: v.optional(v.string())
-    }),
-  },
-  handler: async (ctx, args) => {
-    const updates = {
-      ...args.updates,
-      content: typeof args.updates.content === 'object' 
-        ? JSON.stringify(args.updates.content) 
-        : args.updates.content,
-      choices: args.updates.choices?.map(choice => ({
-        ...choice,
-        consequences: choice.consequences.map(consequence => ({
-          ...consequence,
-          value: typeof consequence.value === 'boolean' ? (consequence.value ? 1 : 0) : consequence.value
-        }))
-      }))
-    };
-    await ctx.db.patch(args.nodeId, updates);
   },
 });
 
@@ -313,10 +263,59 @@ export const createGameStory = mutation({
       description: v.string(),
     })),
     majorStoryBeats: v.array(v.string()),
+    storySize: v.union(
+      v.literal("Quick"),
+      v.literal("Short"),
+      v.literal("Normal"),
+      v.literal("Long"),
+      v.literal("Extended"),
+      v.literal("Huge"),
+      v.literal("Epic")
+    ),
+    rootNodeId: v.id("storyNodes"),
   },
   handler: async (ctx, args) => {
     const storyId = await ctx.db.insert("gameStories", args);
     return storyId;
+  },
+});
+
+export const getGameStory = query({
+  args: { storyId: v.id("gameStories") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.storyId);
+  },
+});
+
+
+export const updateStoryNode = mutation({
+  args: {
+    nodeId: v.id("storyNodes"),
+    updates: v.object({
+      content: v.optional(v.string()),
+      choices: v.optional(v.array(v.object({
+        id: v.string(),
+        text: v.string(),
+        consequences: v.array(v.object({
+          type: v.union(v.literal('addItem'), v.literal('removeItem'), v.literal('setFlag'), v.literal('alterStat'), v.literal('changePoliticalValue')),
+          target: v.string(),
+          value: v.optional(v.union(v.number(), v.boolean())),
+          description: v.optional(v.string())
+        })),
+        nextNodeId: v.optional(v.union(v.id("storyNodes"), v.null()))
+      }))),
+      parentNodeId: v.optional(v.union(v.id("storyNodes"), v.null())),
+    }),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.nodeId, args.updates);
+  },
+});
+
+export const deleteStoryNode = mutation({
+  args: { nodeId: v.id("storyNodes") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.nodeId);
   },
 });
 
@@ -336,5 +335,33 @@ export const createWorldDetails = mutation({
   handler: async (ctx, args) => {
     const worldDetailsId = await ctx.db.insert("worldDetails", args);
     return worldDetailsId;
+  },
+});
+
+export const updateGameStory = mutation({
+  args: {
+    storyId: v.id("gameStories"),
+    updates: v.object({
+      rootNodeId: v.optional(v.id("storyNodes")),
+      title: v.optional(v.string()),
+      mainPlot: v.optional(v.string()),
+      keyCharacters: v.optional(v.array(v.object({
+        name: v.string(),
+        description: v.string(),
+      }))),
+      majorStoryBeats: v.optional(v.array(v.string())),
+      storySize: v.optional(v.union(
+        v.literal("Quick"),
+        v.literal("Short"),
+        v.literal("Normal"),
+        v.literal("Long"),
+        v.literal("Extended"),
+        v.literal("Huge"),
+        v.literal("Epic")
+      )),
+    }),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.storyId, args.updates);
   },
 });

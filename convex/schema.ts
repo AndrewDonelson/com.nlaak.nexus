@@ -46,9 +46,6 @@ export default defineSchema({
   }),
 
   storyNodes: defineTable({
-    x: v.number(),
-    y: v.number(),
-    terrain: v.string(),
     content: v.string(),
     choices: v.array(
       v.object({
@@ -58,13 +55,15 @@ export default defineSchema({
           v.object({
             type: v.union(v.literal("addItem"), v.literal("removeItem"), v.literal("setFlag"), v.literal("alterStat"), v.literal("changePoliticalValue")),
             target: v.string(),
-            value: v.optional(v.number()),
+            value: v.optional(v.union(v.number(), v.boolean())),
             description: v.optional(v.string())
           })
         ),
         nextNodeId: v.optional(v.union(v.id("storyNodes"), v.null()))
       })
     ),
+    parentNodeId: v.optional(v.union(v.id("storyNodes"), v.null())),
+    visitCount: v.number(),
   }),
 
   nexusGameSessions: defineTable({
@@ -86,6 +85,16 @@ export default defineSchema({
       })
     ),
     majorStoryBeats: v.array(v.string()),
+    storySize: v.union(
+      v.literal("Quick"),
+      v.literal("Short"),
+      v.literal("Normal"),
+      v.literal("Long"),
+      v.literal("Extended"),
+      v.literal("Huge"),
+      v.literal("Epic")
+    ),
+    rootNodeId: v.id("storyNodes"),
   }),
 
   worldDetails: defineTable({
@@ -104,5 +113,4 @@ export default defineSchema({
       })
     ),
   })
-
 });

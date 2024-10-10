@@ -1,76 +1,70 @@
 import React from 'react';
 import { Id } from '@/convex/_generated/dataModel';
 import { ScrollArea } from "@/components/ui/scroll-area"
-
-interface ConvexStoryNode {
-  _id: Id<"storyNodes">;
-  content: string;
-  choices: {
-    id: string;
-    text: string;
-    nextNodeId?: Id<"storyNodes"> | null;
-    consequences: Array<{
-      type: string;
-      target: string;
-      value?: number;
-      description?: string;
-    }>;
-  }[];
-}
+import { StoryNode } from '@/lib/game/types';
 
 interface MapComponentProps {
-  nodes: ConvexStoryNode[];
+  nodes: StoryNode[];
   currentNodeId: Id<"storyNodes"> | null;
+  visitedNodes: Id<"storyNodes">[];
   onNodeClick: (nodeId: Id<"storyNodes">) => void;
 }
 
-const MapComponent: React.FC<MapComponentProps> = ({ nodes, currentNodeId, onNodeClick }) => {
-  const nodeMap = new Map(nodes.map(node => [node._id, node]));
+interface TreeNode extends StoryNode {
+  children: TreeNode[];
+}
 
-  const renderNode = (nodeId: Id<"storyNodes">, depth: number = 0, visited: Set<Id<"storyNodes">> = new Set()) => {
-    if (depth > 5 || visited.has(nodeId)) return null; // Limit depth and prevent cycles
-    visited.add(nodeId);
+const MapComponent: React.FC<MapComponentProps> = ({ nodes, currentNodeId, visitedNodes, onNodeClick }) => {
+  const buildTree = (nodes: StoryNode[]): TreeNode => {
+    const nodeMap = new Map<Id<"storyNodes">, TreeNode>();
+    nodes.forEach(node => nodeMap.set(node._id, { ...node, children: [] }));
 
-    const node = nodeMap.get(nodeId);
-    if (!node) return null;
+    let root: TreeNode | undefined;
 
+    nodes.forEach(node => {
+      const treeNode = nodeMap.get(node._id);
+      if (treeNode) {
+        if (node.parentNodeId === null) {
+          root = treeNode;
+        } else {
+          const parent = nodeMap.get(node.parentNodeId);
+          if (parent) {
+            parent.children.push(treeNode);
+          }
+        }
+      }
+    });
+
+    return root || { _id: '' as Id<"storyNodes">, content: '', choices: [], parentNodeId: null, visitCount: 0, children: [] };
+  };
+
+  const renderNode = (node: TreeNode, depth: number = 0): JSX.Element => {
     const isCurrentNode = node._id === currentNodeId;
-    const hasChildren = node.choices.some(choice => choice.nextNodeId);
+    const isVisited = visitedNodes.includes(node._id);
 
     return (
       <div key={node._id} style={{ marginLeft: `${depth * 20}px` }}>
         <div
           className={`p-2 mb-2 rounded cursor-pointer ${
-            isCurrentNode ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-secondary-foreground'
-          }`}
+            isCurrentNode ? 'bg-primary text-primary-foreground' :
+            isVisited ? 'bg-secondary text-secondary-foreground' : 'bg-muted text-muted-foreground'
+          } hover:opacity-80`}
           onClick={() => onNodeClick(node._id)}
         >
           {node.content.substring(0, 30)}...
         </div>
-        {hasChildren && (
-          <div>
-            {node.choices.map(choice => 
-              choice.nextNodeId && renderNode(choice.nextNodeId, depth + 1, new Set(visited))
-            )}
-          </div>
-        )}
+        {node.children.map(child => renderNode(child, depth + 1))}
       </div>
     );
   };
 
-  const renderTree = () => {
-    try {
-      if (nodes.length === 0) return <div>No nodes available</div>;
-      return renderNode(nodes[0]._id);
-    } catch (error) {
-      console.error("Error rendering node tree:", error);
-      return <div>Error rendering map</div>;
-    }
-  };
+  const treeRoot = buildTree(nodes);
 
   return (
-    <ScrollArea className="h-[300px] w-[200px]">
-      {renderTree()}
+    <ScrollArea className="h-[400px] w-[300px] border rounded">
+      <div className="p-4">
+        {renderNode(treeRoot)}
+      </div>
     </ScrollArea>
   );
 };

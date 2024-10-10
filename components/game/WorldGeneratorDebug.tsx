@@ -2,8 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { useMutation, useQuery, useConvex } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
-import { generateGameStory, generateWorldDetails, generateStoryNode, SurroundingNode, WorldPosition } from '@/lib/ai';
-import { StoryNode, Choice, Consequence } from '@/lib/game/types';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { generateGameStory, generateWorldDetails, generateStoryNode } from '@/lib/ai';
+import { Choice, Consequence, StorySize } from '@/lib/game/types';
 import { Id } from '@/convex/_generated/dataModel';
 import { debug } from '@/lib/utils';
 
@@ -17,74 +18,29 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [stopGeneration, setStopGeneration] = useState(false);
-    //const getStoryNode = useQuery(api.nexusEngine.getStoryNode);
+    const [storySize, setStorySize] = useState<StorySize>(StorySize.Normal);
     const createStoryNode = useMutation(api.nexusEngine.createStoryNode);
     const createGameStory = useMutation(api.nexusEngine.createGameStory);
     const createWorldDetails = useMutation(api.nexusEngine.createWorldDetails);
     const updateStoryNode = useMutation(api.nexusEngine.updateStoryNode);
-    const allNodes = useQuery(api.nexusEngine.getAllStoryNodes) ?? [];
 
-    const handleNodeCreate = async (x: number, y: number, terrain: string, content: string | object, choices: Choice[]) => {
+    const handleNodeCreate = async (content: string, choices: Choice[], parentNodeId: Id<"storyNodes"> | null) => {
         try {
-            debug('WorldGeneratorDebug', `Creating node at position (${x}, ${y})`);
-            debug('WorldGeneratorDebug', `Node terrain: ${terrain}`);
-            debug('WorldGeneratorDebug', `Node content: ${JSON.stringify(content)}`);
-
-            const updatedChoices = choices.map(choice => ({
-                ...choice,
-                nextNodeId: null as Id<"storyNodes"> | null
-            }));
-
-            debug('WorldGeneratorDebug', `Node choices: ${JSON.stringify(updatedChoices)}`);
-
-            const contentString = typeof content === 'object' ? JSON.stringify(content) : content;
+            debug('WorldGeneratorDebug', `Creating node with content: ${content.substring(0, 50)}...`);
+            debug('WorldGeneratorDebug', `Node choices: ${JSON.stringify(choices)}`);
 
             const newNodeId = await createStoryNode({
-                content: contentString,
-                choices: updatedChoices,
-                x,
-                y,
-                terrain
+                content,
+                choices,
+                parentNodeId
             });
             debug('WorldGeneratorDebug', `Node created with ID: ${newNodeId}`);
             return newNodeId;
         } catch (error) {
             console.error("Error creating node:", error);
             debug('WorldGeneratorDebug', `Error creating node: ${error}`);
-            throw new Error(`Failed to create node at position (${x}, ${y})`);
+            throw new Error(`Failed to create node`);
         }
-    };
-
-    const getSurroundingNodes = useCallback((x: number, y: number): SurroundingNode[] => {
-        const directions: [number, number, SurroundingNode['direction']][] = [
-            [-1, -1, 'northwest'], [0, -1, 'north'], [1, -1, 'northeast'],
-            [-1, 0, 'west'], [1, 0, 'east'],
-            [-1, 1, 'southwest'], [0, 1, 'south'], [1, 1, 'southeast']
-        ];
-
-        const surroundingNodes = directions
-            .map(([dx, dy, direction]) => {
-                const node = allNodes.find(n => n.x === x + dx && n.y === y + dy);
-                if (node) {
-                    return {
-                        direction,
-                        content: node.content,
-                        terrain: node.terrain
-                    };
-                }
-                return null;
-            })
-            .filter((node): node is SurroundingNode => node !== null);
-
-        debug('WorldGeneratorDebug', `Surrounding nodes for (${x}, ${y}): ${JSON.stringify(surroundingNodes)}`);
-        return surroundingNodes;
-    }, [allNodes]);
-
-    const MAP_SIZE = 3;
-    const TOTAL_NODES = MAP_SIZE * MAP_SIZE;
-
-    const calculateProgress = (x: number, y: number): number => {
-        return ((y * MAP_SIZE + x + 1) / TOTAL_NODES) * 100;
     };
 
     const generateWorld = async () => {
@@ -96,12 +52,13 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
         try {
             debug('WorldGeneratorDebug', 'Starting world generation');
             debug('WorldGeneratorDebug', `Game info: ${JSON.stringify(gameInfo)}`);
+            debug('WorldGeneratorDebug', `Story size: ${storySize}`);
 
             const { gameStoryId, outline } = await generateGameStoryAndOutline();
             await generateWorldDetailsAndSave(gameStoryId, outline);
-            const nodeIds = await generateNodes(outline);
+            const rootNodeId = await generateNodes(outline);
 
-            await updateNodeConnections(nodeIds);
+            await updateGameStoryWithRootNode(gameStoryId, rootNodeId);
 
             debug('WorldGeneratorDebug', 'World generation completed');
         } catch (error) {
@@ -122,7 +79,11 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
             const outline = JSON.parse(outlineResponse);
             debug('WorldGeneratorDebug', `Game story outline: ${JSON.stringify(outline)}`);
 
-            const gameStoryId = await createGameStory(outline);
+            const gameStoryId = await createGameStory({
+                ...outline,
+                storySize: storySize,
+                rootNodeId: null as unknown as Id<"storyNodes"> // We'll update this later
+            });
             return { gameStoryId, outline };
         } catch (error) {
             throw new Error(`Failed to generate game story: ${error}`);
@@ -131,7 +92,7 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
 
     const generateWorldDetailsAndSave = async (gameStoryId: Id<"gameStories">, outline: any) => {
         try {
-            const detailsResponse = await generateWorldDetails(JSON.stringify(outline), MAP_SIZE);
+            const detailsResponse = await generateWorldDetails(JSON.stringify(outline), storySize);
             if (!detailsResponse) throw new Error("Failed to generate world details");
 
             const details = JSON.parse(detailsResponse);
@@ -146,92 +107,75 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
         }
     };
 
-    const generateNodes = async (outline: any): Promise<(Id<"storyNodes"> | null)[][]> => {
-        const nodeIds: (Id<"storyNodes"> | null)[][] = Array(MAP_SIZE).fill(null).map(() => Array(MAP_SIZE).fill(null));
+    const generateNodes = async (outline: any): Promise<Id<"storyNodes">> => {
+        let rootNodeId: Id<"storyNodes"> | null = null;
+        let nodesCreated = 0;
 
-        for (let y = 0; y < MAP_SIZE; y++) {
-            for (let x = 0; x < MAP_SIZE; x++) {
-                if (stopGeneration) {
-                    throw new Error("Generation stopped by user");
-                }
-                try {
-                    const surroundingNodes: SurroundingNode[] = getSurroundingNodes(x, y);
-                    const worldPosition: WorldPosition = { x, y, totalWidth: MAP_SIZE, totalHeight: MAP_SIZE };
-
-                    debug('WorldGeneratorDebug', `Generating node at position (${x}, ${y})`);
-                    const nodeContentResponse = await generateStoryNode(JSON.stringify(outline), surroundingNodes, worldPosition);
-                    debug('WorldGeneratorDebug', `Raw node content: ${nodeContentResponse}`);
-
-                    const nodeContent = JSON.parse(nodeContentResponse);
-                    debug('WorldGeneratorDebug', `Parsed node content: ${JSON.stringify(nodeContent)}`);
-
-                    const newNodeId = await handleNodeCreate(x, y, nodeContent.terrain, nodeContent.content, nodeContent.choices);
-                    nodeIds[y][x] = newNodeId;
-
-                    onProgress(calculateProgress(x, y));
-                } catch (error) {
-                    throw new Error(`Failed to generate node at (${x}, ${y}): ${error}`);
-                }
+        const createNode = async (parentNodeId: Id<"storyNodes"> | null, depth: number): Promise<void> => {
+            if (stopGeneration || nodesCreated >= storySize) {
+                return;
             }
-        }
 
-        return nodeIds;
-    };
+            try {
+                const nodeContentResponse = await generateStoryNode(JSON.stringify(outline), nodesCreated, storySize);
+                debug('WorldGeneratorDebug', `Raw node content: ${nodeContentResponse}`);
 
-    const updateNodeConnections = async (nodeIds: (Id<"storyNodes"> | null)[][]) => {
-        for (let y = 0; y < MAP_SIZE; y++) {
-            for (let x = 0; x < MAP_SIZE; x++) {
-                const currentNodeId = nodeIds[y][x];
-                if (currentNodeId) {
-                    try {
-                        const currentNode = await convex.query(api.nexusEngine.getStoryNode, { nodeId: currentNodeId });
-                        if (currentNode) {
-                            const updatedChoices = currentNode.choices.map((choice: any) => {
-                                let nextNodeId: Id<"storyNodes"> | null = null;
-                                switch (choice.id) {
-                                    case "1": // North
-                                        nextNodeId = y > 0 ? nodeIds[y - 1][x] : null;
-                                        break;
-                                    case "2": // East
-                                        nextNodeId = x < MAP_SIZE - 1 ? nodeIds[y][x + 1] : null;
-                                        break;
-                                    case "3": // South
-                                        nextNodeId = y < MAP_SIZE - 1 ? nodeIds[y + 1][x] : null;
-                                        break;
-                                    case "4": // West
-                                        nextNodeId = x > 0 ? nodeIds[y][x - 1] : null;
-                                        break;
-                                }
-                                return {
-                                    id: choice.id,
-                                    text: choice.text,
-                                    consequences: choice.consequences.map((cons: any) => ({
-                                        type: cons.type as "addItem" | "removeItem" | "setFlag" | "alterStat" | "changePoliticalValue",
-                                        target: cons.target,
-                                        value: cons.value,
-                                        description: cons.description
-                                    })),
-                                    nextNodeId
-                                } as Choice;
-                            });
-                            await convex.mutation(api.nexusEngine.updateStoryNode, {
-                                nodeId: currentNodeId,
-                                updates: {
-                                    choices: updatedChoices,
-                                    content: currentNode.content // Include the existing content
-                                }
-                            });
-                        }
-                    } catch (error) {
-                        throw new Error(`Failed to update node connections at (${x}, ${y}): ${error}`);
+                const nodeContent = JSON.parse(nodeContentResponse);
+                debug('WorldGeneratorDebug', `Parsed node content: ${JSON.stringify(nodeContent)}`);
+
+                const newNodeId = await handleNodeCreate(nodeContent.content, nodeContent.choices, parentNodeId);
+                nodesCreated++;
+
+                if (!rootNodeId) {
+                    rootNodeId = newNodeId;
+                }
+
+                onProgress((nodesCreated / storySize) * 100);
+
+                // Recursively create child nodes
+                for (const choice of nodeContent.choices) {
+                    if (depth < 5 && Math.random() > 0.3) { // Limit depth and add some randomness
+                        await createNode(newNodeId, depth + 1);
                     }
                 }
+            } catch (error) {
+                throw new Error(`Failed to generate node: ${error}`);
             }
+        };
+
+        await createNode(null, 0);
+
+        if (!rootNodeId) {
+            throw new Error("Failed to create root node");
+        }
+
+        return rootNodeId;
+    };
+
+    const updateGameStoryWithRootNode = async (gameStoryId: Id<"gameStories">, rootNodeId: Id<"storyNodes">) => {
+        try {
+            await convex.mutation(api.nexusEngine.updateGameStory, {
+                storyId: gameStoryId,
+                updates: { rootNodeId }
+            });
+            debug('WorldGeneratorDebug', `Updated game story with root node ID: ${rootNodeId}`);
+        } catch (error) {
+            throw new Error(`Failed to update game story with root node: ${error}`);
         }
     };
 
     return (
         <div className="space-y-4">
+            <Select onValueChange={(value) => setStorySize(StorySize[value as keyof typeof StorySize])}>
+                <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select story size" />
+                </SelectTrigger>
+                <SelectContent>
+                    {Object.keys(StorySize).filter(key => isNaN(Number(key))).map((size) => (
+                        <SelectItem key={size} value={size}>{size} ({StorySize[size as keyof typeof StorySize]} nodes)</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
             {!isGenerating ? (
                 <Button onClick={generateWorld} className="w-full">
                     Generate World (Debug)

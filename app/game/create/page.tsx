@@ -5,17 +5,15 @@ import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import StoryNodeEditor from '@/components/game/StoryNodeEditor';
 import StoryNodeList from '@/components/game/StoryNodeList';
-import MapSizeSelector from '@/components/game/MapSizeSelector';
-import MapComponent from '@/components/game/MapComponent';
 import GameInfoSetter from '@/components/game/GameInfoSetter';
-//import WorldGenerator from '@/components/game/WorldGenerator';
-import { StoryNode } from '@/lib/game/types';
+import { StoryNode, StorySize } from '@/lib/game/types';
 import { Button } from '@/components/ui/button';
 import WorldGeneratorDebug from '@/components/game/WorldGeneratorDebug';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const GameCreatePage: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<Id<"storyNodes"> | null>(null);
-  const [mapSize, setMapSize] = useState<number>(10);
+  const [storySize, setStorySize] = useState<StorySize>(StorySize.Normal);
   const [gameInfo, setGameInfo] = useState({ genre: '', theme: '', additionalInfo: '' });
   const [generationProgress, setGenerationProgress] = useState<number>(0);
   
@@ -23,8 +21,8 @@ const GameCreatePage: React.FC = () => {
   const updateStoryNode = useMutation(api.nexusEngine.updateStoryNode);
   const deleteStoryNode = useMutation(api.nexusEngine.deleteStoryNode);
 
-  const handleNodeSelect = (nodeId: string) => {
-    setSelectedNodeId(nodeId as Id<"storyNodes">);
+  const handleNodeSelect = (nodeId: Id<"storyNodes">) => {
+    setSelectedNodeId(nodeId);
   };
 
   const handleNodeUpdate = async (updatedNode: StoryNode) => {
@@ -34,9 +32,6 @@ const GameCreatePage: React.FC = () => {
         updates: {
           content: updatedNode.content,
           choices: updatedNode.choices,
-          terrain: updatedNode.terrain,
-          x: updatedNode.x,
-          y: updatedNode.y
         }
       });
     }
@@ -55,24 +50,23 @@ const GameCreatePage: React.FC = () => {
       
       <GameInfoSetter onInfoSet={setGameInfo} />
       
-      <div className="mt-4">
-        <MapSizeSelector onSizeChange={setMapSize} />
-      </div>
+      {/* <div className="mt-4">
+        <Select onValueChange={(value) => setStorySize(StorySize[value as keyof typeof StorySize])}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Select story size" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.keys(StorySize).filter(key => isNaN(Number(key))).map((size) => (
+              <SelectItem key={size} value={size}>{size} ({StorySize[size as keyof typeof StorySize]} nodes)</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div> */}
       
       <div className="mt-4">
-        {/* <WorldGenerator
-          gameInfo={gameInfo}
-          mapSize={mapSize}
-          onProgress={setGenerationProgress}
-        /> */}
-
         <WorldGeneratorDebug
-        gameInfo={{
-            genre: "Sci-Fi",
-            theme: "Elan Mosk, a brilliant wants to build a space company to colonize mars",
-            additionalInfo: "The story starts with Elan sitting in from of a PC programming in the year 1999"
-        }}
-        onProgress={(progress) => console.log(`Generation progress: ${progress}%`)}
+          gameInfo={gameInfo}
+          onProgress={setGenerationProgress}
         />        
       </div>
       
@@ -85,32 +79,23 @@ const GameCreatePage: React.FC = () => {
       
       <div className="flex flex-col lg:flex-row gap-6 mt-6">
         <div className="w-full lg:w-1/2">
-          <MapComponent 
-            size={mapSize}
-            nodes={storyNodes || []}
-            onNodeClick={handleNodeSelect}
-            isGenerating={generationProgress > 0 && generationProgress < 100}
-            generationProgress={generationProgress}
-          />
-        </div>
-        <div className="w-full lg:w-1/2">
           <StoryNodeList
             nodes={storyNodes || []}
             onNodeSelect={handleNodeSelect}
             onNodeDelete={handleNodeDelete}
           />
         </div>
-      </div>
-      
-      <div className="mt-6">
-        {selectedNodeId && storyNodes && (
-          <StoryNodeEditor
-            node={storyNodes.find(node => node._id === selectedNodeId) || null}
-            onNodeUpdate={handleNodeUpdate}
-          />
-        )}
+        <div className="w-full lg:w-1/2">
+          {selectedNodeId && storyNodes && (
+            <StoryNodeEditor
+              node={storyNodes.find(node => node._id === selectedNodeId) || null}
+              onNodeUpdate={handleNodeUpdate}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
 };
+
 export default GameCreatePage;

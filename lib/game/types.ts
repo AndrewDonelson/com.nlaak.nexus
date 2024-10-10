@@ -43,7 +43,6 @@ export interface Player {
     alignmentHistory: AlignmentHistoryPoint[];
 }
 
-
 export type Consequence = 
   | { type: 'addItem' | 'removeItem'; target: string; value?: never; description?: string }
   | { type: 'setFlag'; target: string; value: boolean; description?: string }
@@ -53,16 +52,15 @@ export interface Choice {
   id: string;
   text: string;
   consequences: Consequence[];
-  nextNodeId: Id<"storyNodes"> | null;
+  nextNodeId?: Id<"storyNodes"> | null;
 }
 
 export interface StoryNode {
   _id: Id<"storyNodes">;
   content: string;
   choices: Choice[];
-  x: number;
-  y: number;
-  terrain: string;
+  parentNodeId?: Id<"storyNodes"> | null;
+  visitCount: number;
 }
 
 export interface NexusGameSession {
@@ -73,4 +71,14 @@ export interface NexusGameSession {
     visitedNodes: Id<"storyNodes">[];
     title: string;
     version: string;
+}
+
+export enum StorySize {
+    Quick = 10,
+    Short = 25,
+    Normal = 100,
+    Long = 200,
+    Extended = 250,
+    Huge = 500,
+    Epic = 1000
 }

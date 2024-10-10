@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { debug } from '@/lib/utils';
-import MapComponent from '@/components/game/MapComponent';
+import StoryProgressMap from '@/components/game/StoryProgressMap';
+import { StoryNode } from '@/lib/game/types';
 
 export default function GamePlayPage() {
   const [sessionId, setSessionId] = useState<Id<"nexusGameSessions"> | null>(null);
@@ -18,9 +19,9 @@ export default function GamePlayPage() {
   const session = useQuery(api.nexusEngine.getNexusGameSession, sessionId ? { sessionId } : 'skip');
   const player = useQuery(api.nexusEngine.getPlayer, playerId ? { playerId } : 'skip');
   const currentNode = useQuery(api.nexusEngine.getStoryNode, currentNodeId ? { nodeId: currentNodeId } : 'skip');
-  const allNodes = useQuery(api.nexusEngine.getAllStoryNodes);
-
+  const allNodes = useQuery(api.nexusEngine.getAllStoryNodes) as StoryNode[] | undefined;
   const makeChoice = useMutation(api.nexusEngine.makeChoice);
+  const goBack = useMutation(api.nexusEngine.goBack);
   const updatePoliticalAlignment = useMutation(api.nexusEngine.updatePoliticalAlignment);
   const createPlayer = useMutation(api.nexusEngine.createPlayer);
   const createNexusGameSession = useMutation(api.nexusEngine.createNexusGameSession);
@@ -94,16 +95,26 @@ export default function GamePlayPage() {
         }
       }
 
-      // Instead of calling getNexusGameSession directly, we update the sessionId state
-      // This will trigger a re-fetch of the session data via the useQuery hook
-      setSessionId(sessionId);
+      // The session will be automatically updated due to the reactive nature of Convex
     } catch (error) {
       debug('GamePlayPage', `Error in handleChoice: ${error}`);
     }
   };
 
-  const handleMapNodeClick = (nodeId: Id<"storyNodes">) => {
-    setCurrentNodeId(nodeId);
+  const handleGoBack = async () => {
+    debug('GamePlayPage', 'Attempting to go back');
+    if (!sessionId) {
+      debug('GamePlayPage', 'Error: sessionId is null');
+      return;
+    }
+
+    try {
+      await goBack({ sessionId });
+      debug('GamePlayPage', 'Successfully went back to previous node');
+      // The session will be automatically updated due to the reactive nature of Convex
+    } catch (error) {
+      debug('GamePlayPage', `Error in handleGoBack: ${error}`);
+    }
   };
 
   if (!session || !player || !currentNode || !allNodes) {
@@ -112,12 +123,12 @@ export default function GamePlayPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 mt-12 flex">
+    <div className="container mx-auto p-4 flex">
       <div className="w-1/4 pr-4">
-        <MapComponent
+        <StoryProgressMap
           nodes={allNodes}
           currentNodeId={currentNodeId}
-          onNodeClick={handleMapNodeClick}
+          visitedNodes={session.visitedNodes}
         />
       </div>
       <div className="w-3/4">
@@ -157,6 +168,14 @@ export default function GamePlayPage() {
                   {choice.text}
                 </Button>
               ))}
+              {currentNode.parentNodeId && (
+                <Button
+                  onClick={handleGoBack}
+                  className="w-full bg-gray-500 hover:bg-gray-600"
+                >
+                  Go Back
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
