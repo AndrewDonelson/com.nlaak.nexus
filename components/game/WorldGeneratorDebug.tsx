@@ -132,8 +132,27 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
     
                 // Create child nodes and update choices
                 const updatedChoices = [];
-                for (const choice of nodeContent.choices) {
-                    if (depth < 5 && Math.random() > 0.3) { // Limit depth and add some randomness
+                const choiceCount = Math.floor(Math.random() * 4) + 2; // 2 to 5 choices
+                for (let i = 0; i < choiceCount; i++) {
+                    const choice = nodeContent.choices[i] || { 
+                        id: `choice_${i}`, 
+                        text: `Generated choice ${i + 1}`,
+                        consequences: []
+                    };
+                    
+                    // Generate consequences
+                    const consequenceCount = Math.floor(Math.random() * 3) + 1; // 1 to 3 consequences
+                    for (let j = 0; j < consequenceCount; j++) {
+                        const consequenceType = ['addItem', 'removeItem', 'setFlag', 'alterStat', 'changePoliticalValue'][Math.floor(Math.random() * 5)];
+                        choice.consequences.push({
+                            type: consequenceType,
+                            target: `generated_target_${j}`,
+                            value: Math.random() > 0.5 ? Math.floor(Math.random() * 20) - 10 : Math.random() > 0.5,
+                            description: `Generated consequence ${j + 1}`
+                        });
+                    }
+
+                    if (depth < 5 && nodesCreated < storySize) { // Limit depth and total nodes
                         const childNodeId = await createNode(newNodeId, depth + 1);
                         updatedChoices.push({...choice, nextNodeId: childNodeId});
                     } else {

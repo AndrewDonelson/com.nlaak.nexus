@@ -43,25 +43,29 @@ export interface Player {
     alignmentHistory: AlignmentHistoryPoint[];
 }
 
-export type Consequence = 
-  | { type: 'addItem' | 'removeItem'; target: string; value?: never; description?: string }
-  | { type: 'setFlag'; target: string; value: boolean; description?: string }
-  | { type: 'alterStat' | 'changePoliticalValue'; target: string; value: number; description?: string };
+export type ConsequenceType = 'addItem' | 'removeItem' | 'setFlag' | 'alterStat' | 'changePoliticalValue';
 
-  export interface StoryNode {
+export interface Consequence {
+    type: ConsequenceType;
+    target: string;
+    value?: number | boolean;
+    description?: string;
+}
+
+export interface Choice {
+    id: string;
+    text: string;
+    consequences: Consequence[];
+    nextNodeId: Id<"storyNodes"> | null;
+}
+
+export interface StoryNode {
     _id: Id<"storyNodes">;
     content: string;
     choices: Choice[];
     parentNodeId: Id<"storyNodes"> | null;
     visitCount: number;
-  }
-  
-  export interface Choice {
-    id: string;
-    text: string;
-    consequences: Consequence[];
-    nextNodeId: Id<"storyNodes"> | null;
-  }
+}
 
 export interface NexusGameSession {
     _id: Id<"nexusGameSessions">;
