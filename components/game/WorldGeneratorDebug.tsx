@@ -81,7 +81,6 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
             const gameStoryId = await createGameStory({
                 ...outline,
                 storySize: storySize,
-                // We're not setting rootNodeId here, it will be updated later
             });
             return { gameStoryId, outline };
         } catch (error) {
@@ -94,7 +93,6 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
             const details = await generateWorldDetails(JSON.stringify(outline), storySize);
             if (!details) throw new Error("Failed to generate world details");
 
-            //const details = JSON.parse(detailsResponse);
             debug('WorldGeneratorDebug', `World details: ${JSON.stringify(details)}`);
 
             await createWorldDetails({
@@ -110,20 +108,20 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
         let rootNodeId: Id<"storyNodes"> | null = null;
         let nodesCreated = 0;
     
-        const createNode = async (parentNodeId: Id<"storyNodes"> | null, depth: number): Promise<void> => {
+        const createNode = async (parentNodeId: Id<"storyNodes"> | null, depth: number): Promise<Id<"storyNodes">> => {
             if (stopGeneration || nodesCreated >= storySize) {
-                return;
+                throw new Error("Node generation stopped or limit reached");
             }
     
             try {
                 const nodeContent = await generateStoryNode(
                     outline,
                     [], // Empty array for surroundingNodes
-                    { x: nodesCreated, y: 0, totalWidth: storySize, totalHeight: 1 } // Linear world position
+                    { x: depth, y: nodesCreated, totalWidth: storySize, totalHeight: storySize } // For AI generation context
                 );
                 debug('WorldGeneratorDebug', `Node content: ${JSON.stringify(nodeContent)}`);
     
-                const newNodeId = await handleNodeCreate(nodeContent.content, nodeContent.choices, parentNodeId);
+                const newNodeId = await handleNodeCreate(nodeContent.content, [], parentNodeId);
                 nodesCreated++;
     
                 if (!rootNodeId) {
@@ -132,12 +130,24 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
     
                 onProgress((nodesCreated / storySize) * 100);
     
-                // Recursively create child nodes
+                // Create child nodes and update choices
+                const updatedChoices = [];
                 for (const choice of nodeContent.choices) {
                     if (depth < 5 && Math.random() > 0.3) { // Limit depth and add some randomness
-                        await createNode(newNodeId, depth + 1);
+                        const childNodeId = await createNode(newNodeId, depth + 1);
+                        updatedChoices.push({...choice, nextNodeId: childNodeId});
+                    } else {
+                        updatedChoices.push(choice);
                     }
                 }
+    
+                // Update the node with the linked choices
+                await updateStoryNode({
+                    nodeId: newNodeId,
+                    updates: { choices: updatedChoices }
+                });
+    
+                return newNodeId;
             } catch (error) {
                 throw new Error(`Failed to generate node: ${error}`);
             }
