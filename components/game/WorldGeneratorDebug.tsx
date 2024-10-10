@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation, useQuery, useConvex } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { generateGameStory, generateWorldDetails, generateStoryNode, SurroundingNode, WorldPosition } from '@/lib/ai';
@@ -13,13 +13,16 @@ interface WorldGeneratorDebugProps {
 }
 
 const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onProgress }) => {
+    const convex = useConvex();
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [stopGeneration, setStopGeneration] = useState(false);
+    //const getStoryNode = useQuery(api.nexusEngine.getStoryNode);
     const createStoryNode = useMutation(api.nexusEngine.createStoryNode);
     const createGameStory = useMutation(api.nexusEngine.createGameStory);
     const createWorldDetails = useMutation(api.nexusEngine.createWorldDetails);
-    const allNodes = useQuery(api.nexusEngine.getAllStoryNodes) as StoryNode[] | undefined;
+    const updateStoryNode = useMutation(api.nexusEngine.updateStoryNode);
+    const allNodes = useQuery(api.nexusEngine.getAllStoryNodes) ?? [];
 
     const handleNodeCreate = async (x: number, y: number, terrain: string, content: string | object, choices: Choice[]) => {
         try {
@@ -34,8 +37,10 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
 
             debug('WorldGeneratorDebug', `Node choices: ${JSON.stringify(updatedChoices)}`);
 
+            const contentString = typeof content === 'object' ? JSON.stringify(content) : content;
+
             const newNodeId = await createStoryNode({
-                content: typeof content === 'string' ? content : JSON.stringify(content),
+                content: contentString,
                 choices: updatedChoices,
                 x,
                 y,
@@ -51,8 +56,6 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
     };
 
     const getSurroundingNodes = useCallback((x: number, y: number): SurroundingNode[] => {
-        if (!allNodes) return [];
-
         const directions: [number, number, SurroundingNode['direction']][] = [
             [-1, -1, 'northwest'], [0, -1, 'north'], [1, -1, 'northeast'],
             [-1, 0, 'west'], [1, 0, 'east'],
@@ -77,6 +80,13 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
         return surroundingNodes;
     }, [allNodes]);
 
+    const MAP_SIZE = 3;
+    const TOTAL_NODES = MAP_SIZE * MAP_SIZE;
+
+    const calculateProgress = (x: number, y: number): number => {
+        return ((y * MAP_SIZE + x + 1) / TOTAL_NODES) * 100;
+    };
+
     const generateWorld = async () => {
         setIsGenerating(true);
         setError(null);
@@ -87,48 +97,12 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
             debug('WorldGeneratorDebug', 'Starting world generation');
             debug('WorldGeneratorDebug', `Game info: ${JSON.stringify(gameInfo)}`);
 
-            const outlineResponse = await generateGameStory(gameInfo.genre, gameInfo.theme, gameInfo.additionalInfo);
-            if (!outlineResponse) throw new Error("Failed to generate game story");
-            
-            const outline = JSON.parse(outlineResponse);
-            debug('WorldGeneratorDebug', `Game story outline: ${JSON.stringify(outline)}`);
+            const { gameStoryId, outline } = await generateGameStoryAndOutline();
+            await generateWorldDetailsAndSave(gameStoryId, outline);
+            const nodeIds = await generateNodes(outline);
 
-            // Create game story in the database
-            const gameStoryId = await createGameStory(outline);
+            await updateNodeConnections(nodeIds);
 
-            const detailsResponse = await generateWorldDetails(JSON.stringify(outline), 1); // Set map size to 1x1
-            if (!detailsResponse) throw new Error("Failed to generate world details");
-            
-            const details = JSON.parse(detailsResponse);
-            debug('WorldGeneratorDebug', `World details: ${JSON.stringify(details)}`);
-
-            // Create world details in the database
-            await createWorldDetails({
-                gameStoryId,
-                ...details
-            });
-
-            const totalNodes = 1; // 1x1 map
-            for (let y = 0; y < 1; y++) {
-                for (let x = 0; x < 1; x++) {
-                    if (stopGeneration) {
-                        throw new Error("Generation stopped by user");
-                    }
-                    const surroundingNodes: SurroundingNode[] = getSurroundingNodes(x, y);
-                    const worldPosition: WorldPosition = { x, y, totalWidth: 1, totalHeight: 1 };
-
-                    debug('WorldGeneratorDebug', `Generating node at position (${x}, ${y})`);
-                    const nodeContentResponse = await generateStoryNode(JSON.stringify(outline), surroundingNodes, worldPosition);
-                    debug('WorldGeneratorDebug', `Raw node content: ${nodeContentResponse}`);
-
-                    const nodeContent = JSON.parse(nodeContentResponse);
-                    debug('WorldGeneratorDebug', `Parsed node content: ${JSON.stringify(nodeContent)}`);
-
-                    await handleNodeCreate(x, y, nodeContent.terrain, nodeContent.content, nodeContent.choices);
-
-                    onProgress(100); // 100% progress for 1x1 map
-                }
-            }
             debug('WorldGeneratorDebug', 'World generation completed');
         } catch (error) {
             console.error("Error generating world:", error);
@@ -137,6 +111,122 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
         } finally {
             setIsGenerating(false);
             setStopGeneration(false);
+        }
+    };
+
+    const generateGameStoryAndOutline = async (): Promise<{ gameStoryId: Id<"gameStories">; outline: any }> => {
+        try {
+            const outlineResponse = await generateGameStory(gameInfo.genre, gameInfo.theme, gameInfo.additionalInfo);
+            if (!outlineResponse) throw new Error("Failed to generate game story");
+
+            const outline = JSON.parse(outlineResponse);
+            debug('WorldGeneratorDebug', `Game story outline: ${JSON.stringify(outline)}`);
+
+            const gameStoryId = await createGameStory(outline);
+            return { gameStoryId, outline };
+        } catch (error) {
+            throw new Error(`Failed to generate game story: ${error}`);
+        }
+    };
+
+    const generateWorldDetailsAndSave = async (gameStoryId: Id<"gameStories">, outline: any) => {
+        try {
+            const detailsResponse = await generateWorldDetails(JSON.stringify(outline), MAP_SIZE);
+            if (!detailsResponse) throw new Error("Failed to generate world details");
+
+            const details = JSON.parse(detailsResponse);
+            debug('WorldGeneratorDebug', `World details: ${JSON.stringify(details)}`);
+
+            await createWorldDetails({
+                gameStoryId,
+                ...details
+            });
+        } catch (error) {
+            throw new Error(`Failed to generate world details: ${error}`);
+        }
+    };
+
+    const generateNodes = async (outline: any): Promise<(Id<"storyNodes"> | null)[][]> => {
+        const nodeIds: (Id<"storyNodes"> | null)[][] = Array(MAP_SIZE).fill(null).map(() => Array(MAP_SIZE).fill(null));
+
+        for (let y = 0; y < MAP_SIZE; y++) {
+            for (let x = 0; x < MAP_SIZE; x++) {
+                if (stopGeneration) {
+                    throw new Error("Generation stopped by user");
+                }
+                try {
+                    const surroundingNodes: SurroundingNode[] = getSurroundingNodes(x, y);
+                    const worldPosition: WorldPosition = { x, y, totalWidth: MAP_SIZE, totalHeight: MAP_SIZE };
+
+                    debug('WorldGeneratorDebug', `Generating node at position (${x}, ${y})`);
+                    const nodeContentResponse = await generateStoryNode(JSON.stringify(outline), surroundingNodes, worldPosition);
+                    debug('WorldGeneratorDebug', `Raw node content: ${nodeContentResponse}`);
+
+                    const nodeContent = JSON.parse(nodeContentResponse);
+                    debug('WorldGeneratorDebug', `Parsed node content: ${JSON.stringify(nodeContent)}`);
+
+                    const newNodeId = await handleNodeCreate(x, y, nodeContent.terrain, nodeContent.content, nodeContent.choices);
+                    nodeIds[y][x] = newNodeId;
+
+                    onProgress(calculateProgress(x, y));
+                } catch (error) {
+                    throw new Error(`Failed to generate node at (${x}, ${y}): ${error}`);
+                }
+            }
+        }
+
+        return nodeIds;
+    };
+
+    const updateNodeConnections = async (nodeIds: (Id<"storyNodes"> | null)[][]) => {
+        for (let y = 0; y < MAP_SIZE; y++) {
+            for (let x = 0; x < MAP_SIZE; x++) {
+                const currentNodeId = nodeIds[y][x];
+                if (currentNodeId) {
+                    try {
+                        const currentNode = await convex.query(api.nexusEngine.getStoryNode, { nodeId: currentNodeId });
+                        if (currentNode) {
+                            const updatedChoices = currentNode.choices.map((choice: any) => {
+                                let nextNodeId: Id<"storyNodes"> | null = null;
+                                switch (choice.id) {
+                                    case "1": // North
+                                        nextNodeId = y > 0 ? nodeIds[y - 1][x] : null;
+                                        break;
+                                    case "2": // East
+                                        nextNodeId = x < MAP_SIZE - 1 ? nodeIds[y][x + 1] : null;
+                                        break;
+                                    case "3": // South
+                                        nextNodeId = y < MAP_SIZE - 1 ? nodeIds[y + 1][x] : null;
+                                        break;
+                                    case "4": // West
+                                        nextNodeId = x > 0 ? nodeIds[y][x - 1] : null;
+                                        break;
+                                }
+                                return {
+                                    id: choice.id,
+                                    text: choice.text,
+                                    consequences: choice.consequences.map((cons: any) => ({
+                                        type: cons.type as "addItem" | "removeItem" | "setFlag" | "alterStat" | "changePoliticalValue",
+                                        target: cons.target,
+                                        value: cons.value,
+                                        description: cons.description
+                                    })),
+                                    nextNodeId
+                                } as Choice;
+                            });
+                            await convex.mutation(api.nexusEngine.updateStoryNode, {
+                                nodeId: currentNodeId,
+                                updates: {
+                                    choices: updatedChoices,
+                                    content: currentNode.content // Include the existing content
+                                }
+                            });
+                        }
+                    } catch (error) {
+                        throw new Error(`Failed to update node connections at (${x}, ${y}): ${error}`);
+                    }
+                }
+            }
         }
     };
 

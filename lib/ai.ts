@@ -98,17 +98,32 @@ export async function generateGameStory(genre: string, theme: string, additional
         ]
     }
     
-    Provide a high-level overview of the story, including the main plot, key characters, and major story beats. Do not include any text outside of this JSON structure.`;
+    Provide a high-level overview of the story, including the main plot, key characters, and major story beats. Ensure all fields are strings, not nested objects. Do not include any text outside of this JSON structure.`;
   
     const response = await aiSend(prompt, "Generate game story");
-    const content = response.choices[0].message.content;
+    console.log("Full AI response:", JSON.stringify(response, null, 2));
     
-    // Extract JSON from the content
-    const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
-    if (jsonMatch && jsonMatch[1]) {
-        return jsonMatch[1];
-    } else {
-        throw new Error("Failed to extract JSON from AI response");
+    const content = response.choices[0].message.content;
+    console.log("Content extracted from response:", content);
+    
+    // First, try to parse the content directly
+    try {
+        return JSON.parse(content);
+    } catch (error) {
+        console.log("Failed to parse content directly, attempting to extract JSON from code block");
+        // If direct parsing fails, try to extract JSON from code blocks
+        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (jsonMatch && jsonMatch[1]) {
+            try {
+                return JSON.parse(jsonMatch[1]);
+            } catch (innerError) {
+                console.error("Failed to parse JSON from code block:", innerError);
+                throw new Error("Failed to parse JSON from code block in AI response");
+            }
+        } else {
+            console.error("No JSON found in content");
+            throw new Error("Failed to extract or parse JSON from AI response");
+        }
     }
 }
 
@@ -134,17 +149,26 @@ export async function generateWorldDetails(storyOutline: string, mapSize: number
     }
     
     Describe key locations, environments, and points of interest that would be relevant to the story and gameplay. 
-    Consider how these elements would be distributed across the game map. Do not include any text outside of this JSON structure.`;
+    Ensure all descriptions are strings, not nested objects. Consider how these elements would be distributed across the game map. Do not include any text outside of this JSON structure.`;
   
     const response = await aiSend(prompt, "Generate world details");
     const content = response.choices[0].message.content;
     
-    // Extract JSON from the content
-    const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
-    if (jsonMatch && jsonMatch[1]) {
-        return jsonMatch[1];
-    } else {
-        throw new Error("Failed to extract JSON from AI response");
+    try {
+        JSON.parse(content);
+        return content;
+    } catch (error) {
+        const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+        if (jsonMatch && jsonMatch[1]) {
+            try {
+                JSON.parse(jsonMatch[1]);
+                return jsonMatch[1];
+            } catch (innerError) {
+                throw new Error("Failed to parse JSON from code block in AI response");
+            }
+        } else {
+            throw new Error("Failed to extract or parse JSON from AI response");
+        }
     }
 }
 
@@ -187,7 +211,7 @@ export async function generateStoryNode(
     IMPORTANT: Return ONLY a JSON object with the following structure, without any additional text or explanations:
     {
         "terrain": "Terrain description",
-        "content": "Node content (including any characters, items, or events)",
+        "content": "Node content as a single string (including any characters, items, or events)",
         "choices": [
             {
                 "id": "1",
@@ -216,22 +240,25 @@ export async function generateStoryNode(
         ]
     }
     
-    Provide 2-4 choices, each with at least one consequence. Do not include any text outside of this JSON structure.`;
+    Provide 2-4 choices, each with at least one consequence. Ensure that the "content" field is always a single string, not an object or nested structure. Do not include any text outside of this JSON structure.`;
   
     const response = await aiSend(prompt, "Generate story node");
     const content = response.choices[0].message.content;
     
-    // Extract JSON from the content
-    const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
-    if (jsonMatch && jsonMatch[1]) {
-        return jsonMatch[1];
-    } else {
-        // If no JSON block is found, attempt to parse the entire content as JSON
-        try {
-            JSON.parse(content);
-            return content;
-        } catch (error) {
-            throw new Error("Failed to extract valid JSON from AI response");
+    try {
+        JSON.parse(content);
+        return content;
+    } catch (error) {
+        const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+        if (jsonMatch && jsonMatch[1]) {
+            try {
+                JSON.parse(jsonMatch[1]);
+                return jsonMatch[1];
+            } catch (innerError) {
+                throw new Error("Failed to parse JSON from code block in AI response");
+            }
+        } else {
+            throw new Error("Failed to extract or parse JSON from AI response");
         }
     }
 }
