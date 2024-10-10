@@ -254,6 +254,8 @@ export const getAllStoryNodes = query({
   },
 });
 
+// In your nexusEngine.ts file
+
 export const createGameStory = mutation({
   args: {
     title: v.string(),
@@ -263,19 +265,18 @@ export const createGameStory = mutation({
       description: v.string(),
     })),
     majorStoryBeats: v.array(v.string()),
-    storySize: v.union(
-      v.literal("Quick"),
-      v.literal("Short"),
-      v.literal("Normal"),
-      v.literal("Long"),
-      v.literal("Extended"),
-      v.literal("Huge"),
-      v.literal("Epic")
-    ),
-    rootNodeId: v.id("storyNodes"),
+    storySize: v.number(),
+    rootNodeId: v.optional(v.id("storyNodes")), // Make rootNodeId optional
   },
   handler: async (ctx, args) => {
-    const storyId = await ctx.db.insert("gameStories", args);
+    const storyId = await ctx.db.insert("gameStories", {
+      title: args.title,
+      mainPlot: args.mainPlot,
+      keyCharacters: args.keyCharacters,
+      majorStoryBeats: args.majorStoryBeats,
+      storySize: args.storySize,
+      rootNodeId: args.rootNodeId, // This can now be undefined
+    });
     return storyId;
   },
 });
@@ -350,15 +351,7 @@ export const updateGameStory = mutation({
         description: v.string(),
       }))),
       majorStoryBeats: v.optional(v.array(v.string())),
-      storySize: v.optional(v.union(
-        v.literal("Quick"),
-        v.literal("Short"),
-        v.literal("Normal"),
-        v.literal("Long"),
-        v.literal("Extended"),
-        v.literal("Huge"),
-        v.literal("Epic")
-      )),
+      storySize: v.optional(v.number()), // Make storySize optional
     }),
   },
   handler: async (ctx, args) => {

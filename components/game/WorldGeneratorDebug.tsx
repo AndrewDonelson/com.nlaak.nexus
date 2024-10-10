@@ -73,16 +73,15 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
 
     const generateGameStoryAndOutline = async (): Promise<{ gameStoryId: Id<"gameStories">; outline: any }> => {
         try {
-            const outlineResponse = await generateGameStory(gameInfo.genre, gameInfo.theme, gameInfo.additionalInfo);
-            if (!outlineResponse) throw new Error("Failed to generate game story");
-
-            const outline = JSON.parse(outlineResponse);
+            const outline = await generateGameStory(gameInfo.genre, gameInfo.theme, gameInfo.additionalInfo);
+            if (!outline) throw new Error("Failed to generate game story");
+    
             debug('WorldGeneratorDebug', `Game story outline: ${JSON.stringify(outline)}`);
-
+    
             const gameStoryId = await createGameStory({
                 ...outline,
                 storySize: storySize,
-                rootNodeId: null as unknown as Id<"storyNodes"> // We'll update this later
+                // We're not setting rootNodeId here, it will be updated later
             });
             return { gameStoryId, outline };
         } catch (error) {
@@ -92,10 +91,10 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
 
     const generateWorldDetailsAndSave = async (gameStoryId: Id<"gameStories">, outline: any) => {
         try {
-            const detailsResponse = await generateWorldDetails(JSON.stringify(outline), storySize);
-            if (!detailsResponse) throw new Error("Failed to generate world details");
+            const details = await generateWorldDetails(JSON.stringify(outline), storySize);
+            if (!details) throw new Error("Failed to generate world details");
 
-            const details = JSON.parse(detailsResponse);
+            //const details = JSON.parse(detailsResponse);
             debug('WorldGeneratorDebug', `World details: ${JSON.stringify(details)}`);
 
             await createWorldDetails({
@@ -110,28 +109,29 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
     const generateNodes = async (outline: any): Promise<Id<"storyNodes">> => {
         let rootNodeId: Id<"storyNodes"> | null = null;
         let nodesCreated = 0;
-
+    
         const createNode = async (parentNodeId: Id<"storyNodes"> | null, depth: number): Promise<void> => {
             if (stopGeneration || nodesCreated >= storySize) {
                 return;
             }
-
+    
             try {
-                const nodeContentResponse = await generateStoryNode(JSON.stringify(outline), nodesCreated, storySize);
-                debug('WorldGeneratorDebug', `Raw node content: ${nodeContentResponse}`);
-
-                const nodeContent = JSON.parse(nodeContentResponse);
-                debug('WorldGeneratorDebug', `Parsed node content: ${JSON.stringify(nodeContent)}`);
-
+                const nodeContent = await generateStoryNode(
+                    outline,
+                    [], // Empty array for surroundingNodes
+                    { x: nodesCreated, y: 0, totalWidth: storySize, totalHeight: 1 } // Linear world position
+                );
+                debug('WorldGeneratorDebug', `Node content: ${JSON.stringify(nodeContent)}`);
+    
                 const newNodeId = await handleNodeCreate(nodeContent.content, nodeContent.choices, parentNodeId);
                 nodesCreated++;
-
+    
                 if (!rootNodeId) {
                     rootNodeId = newNodeId;
                 }
-
+    
                 onProgress((nodesCreated / storySize) * 100);
-
+    
                 // Recursively create child nodes
                 for (const choice of nodeContent.choices) {
                     if (depth < 5 && Math.random() > 0.3) { // Limit depth and add some randomness
@@ -142,13 +142,13 @@ const WorldGeneratorDebug: React.FC<WorldGeneratorDebugProps> = ({ gameInfo, onP
                 throw new Error(`Failed to generate node: ${error}`);
             }
         };
-
+    
         await createNode(null, 0);
-
+    
         if (!rootNodeId) {
             throw new Error("Failed to create root node");
         }
-
+    
         return rootNodeId;
     };
 

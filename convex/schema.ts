@@ -85,16 +85,8 @@ export default defineSchema({
       })
     ),
     majorStoryBeats: v.array(v.string()),
-    storySize: v.union(
-      v.literal("Quick"),
-      v.literal("Short"),
-      v.literal("Normal"),
-      v.literal("Long"),
-      v.literal("Extended"),
-      v.literal("Huge"),
-      v.literal("Epic")
-    ),
-    rootNodeId: v.id("storyNodes"),
+    storySize: v.number(),
+    rootNodeId: v.optional(v.id("storyNodes")), // Make rootNodeId optional
   }),
 
   worldDetails: defineTable({

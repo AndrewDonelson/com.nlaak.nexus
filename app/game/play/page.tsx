@@ -123,7 +123,7 @@ export default function GamePlayPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 flex">
+    <div className="container mx-auto p-4 mt-12 flex">
       <div className="w-1/4 pr-4">
         <StoryProgressMap
           nodes={allNodes}

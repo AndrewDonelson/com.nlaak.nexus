@@ -1,5 +1,5 @@
+// file: lib/ai.ts
 import { debug } from "./utils";
-import { StorySize } from "./game/types";
 
 const API_ENDPOINT = process.env.PERPLEXITY_API_ENDPOINT || "https://api.perplexity.ai/chat/completions";
 const MODEL_NAME = process.env.PERPLEXITY_MODEL || "llama-3.1-sonar-small-128k-online";
@@ -43,7 +43,7 @@ export const pplxAPI = async (
 
 async function aiSend(prompt: any, input: string): Promise<any | undefined> {
     if (!prompt) return;
-  
+
     try {
         debug("AI.ts", "aiSend: " + prompt + " => " + input);
         const response = await fetch('/api/ai', {
@@ -56,14 +56,14 @@ async function aiSend(prompt: any, input: string): Promise<any | undefined> {
                 roleUser: input,
             }),
         });
-  
+
         if (!response.ok) {
             const errorBody = await response.text();
             console.error(`API error: ${response.status} ${response.statusText}`);
             console.error("Error body:", errorBody);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-  
+
         const data = await response.json();
         if (data.error) {
             console.error("API returned an error:", data.error);
@@ -76,7 +76,39 @@ async function aiSend(prompt: any, input: string): Promise<any | undefined> {
     }
 }
 
-export async function generateGameStory(genre: string, theme: string, additionalInfo: string): Promise<string> {
+// Utility function for robust JSON parsing
+const safeJSONParse = (input: string): any => {
+    if (typeof input !== 'string') {
+        throw new Error(`Invalid input type: expected string, got ${typeof input}`);
+    }
+
+    // First, try to parse the input directly
+    try {
+        return JSON.parse(input);
+    } catch (error) {
+        // If direct parsing fails, try to extract JSON from code blocks
+        const jsonMatch = input.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (jsonMatch && jsonMatch[1]) {
+            try {
+                return JSON.parse(jsonMatch[1]);
+            } catch (innerError) {
+                // If parsing the extracted content fails, throw a detailed error
+                throw new Error(`Failed to parse JSON from code block: ${innerError}`);
+            }
+        }
+
+        // If no JSON-like structure is found, try to clean the input and parse again
+        const cleaned = input.replace(/[\n\r\t]/g, '').trim();
+        try {
+            return JSON.parse(cleaned);
+        } catch (cleanError) {
+            // If all parsing attempts fail, throw a detailed error
+            throw new Error(`Failed to parse JSON: ${error}. Cleaned input: ${cleaned}`);
+        }
+    }
+};
+
+export async function generateGameStory(genre: string, theme: string, additionalInfo: string): Promise<any> {
     const prompt = `As an expert game designer and storyteller, create a compelling game story outline. 
     Genre: ${genre}
     Theme: ${theme}
@@ -99,37 +131,34 @@ export async function generateGameStory(genre: string, theme: string, additional
     }
     
     Provide a high-level overview of the story, including the main plot, key characters, and major story beats. Ensure all fields are strings, not nested objects. Do not include any text outside of this JSON structure.`;
-  
-    const response = await aiSend(prompt, "Generate game story");
-    console.log("Full AI response:", JSON.stringify(response, null, 2));
-    
-    const content = response.choices[0].message.content;
-    console.log("Content extracted from response:", content);
-    
-    // First, try to parse the content directly
+
     try {
-        return JSON.parse(content);
-    } catch (error) {
-        console.log("Failed to parse content directly, attempting to extract JSON from code block");
-        // If direct parsing fails, try to extract JSON from code blocks
-        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-        if (jsonMatch && jsonMatch[1]) {
-            try {
-                return JSON.parse(jsonMatch[1]);
-            } catch (innerError) {
-                console.error("Failed to parse JSON from code block:", innerError);
-                throw new Error("Failed to parse JSON from code block in AI response");
-            }
-        } else {
-            console.error("No JSON found in content");
-            throw new Error("Failed to extract or parse JSON from AI response");
+        const response = await aiSend(prompt, "Generate game story");
+        debug("AI.ts", "Full AI response: " + JSON.stringify(response, null, 2));
+
+        if (!response.choices || !response.choices[0] || !response.choices[0].message || !response.choices[0].message.content) {
+            throw new Error("Unexpected API response structure");
         }
+
+        const content = response.choices[0].message.content;
+        debug("AI.ts", "Content extracted from response: " + content);
+
+        const parsedContent = safeJSONParse(content);
+        debug("AI.ts", "Parsed content: " + JSON.stringify(parsedContent, null, 2));
+
+        return parsedContent;
+    } catch (error) {
+        debug("AI.ts", "Error in generateGameStory: " + error);
+        if (error instanceof SyntaxError) {
+            throw new Error(`Failed to parse JSON in game story: ${error.message}`);
+        }
+        throw new Error(`Failed to generate game story: ${error}`);
     }
 }
 
-export async function generateWorldDetails(storyOutline: string, storySize: StorySize): Promise<string> {
-    const prompt = `Based on the following story outline, create a detailed world for a story with ${storySize} nodes. 
-    Story Outline: ${storyOutline}
+export async function generateWorldDetails(storyOutline: any, mapSize: number): Promise<any> {
+    const prompt = `Based on the following story outline, create a detailed world for a ${mapSize}-node story. 
+    Story Outline: ${JSON.stringify(storyOutline)}
     
     IMPORTANT: Return ONLY a JSON object with the following structure, without any additional text or explanations:
     {
@@ -149,46 +178,51 @@ export async function generateWorldDetails(storyOutline: string, storySize: Stor
     }
     
     Describe key locations, environments, and points of interest that would be relevant to the story and gameplay. 
-    Ensure all descriptions are strings, not nested objects. Consider how these elements would be distributed across the story's progression. Do not include any text outside of this JSON structure.`;
-  
-    const response = await aiSend(prompt, "Generate world details");
-    const content = response.choices[0].message.content;
-    
+    Ensure all descriptions are strings, not nested objects. Consider how these elements would be distributed across the story nodes. Do not include any text outside of this JSON structure.`;
+
     try {
-        JSON.parse(content);
-        return content;
+        const response = await aiSend(prompt, "Generate world details");
+        const content = response.choices[0].message.content;
+        return safeJSONParse(content);
     } catch (error) {
-        const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-        if (jsonMatch && jsonMatch[1]) {
-            try {
-                JSON.parse(jsonMatch[1]);
-                return jsonMatch[1];
-            } catch (innerError) {
-                throw new Error("Failed to parse JSON from code block in AI response");
-            }
-        } else {
-            throw new Error("Failed to extract or parse JSON from AI response");
-        }
+        debug("AI.ts", "Error in generateWorldDetails: " + error);
+        throw new Error(`Failed to generate world details: ${error}`);
     }
 }
 
+export interface SurroundingNode {
+    direction: 'north' | 'south' | 'east' | 'west' | 'northeast' | 'northwest' | 'southeast' | 'southwest';
+    content: string;
+    terrain: string;
+}
+
+export interface WorldPosition {
+    x: number;
+    y: number;
+    totalWidth: number;
+    totalHeight: number;
+}
+
 export async function generateStoryNode(
-    storyContext: string,
-    currentNodeNumber: number,
-    totalNodes: number
-): Promise<string> {
+    storyContext: any,
+    surroundingNodes: SurroundingNode[],
+    worldPosition: WorldPosition
+): Promise<any> {
+    const surroundingNodesInfo = surroundingNodes.map(node =>
+        `${node.direction.toUpperCase()}: Terrain: ${node.terrain}, Content: ${node.content}`
+    ).join('\n');
+
     const prompt = `Create a new story node for a game based on the following context:
-    ${storyContext}
+    ${JSON.stringify(storyContext)}
   
-    Current Node Number: ${currentNodeNumber}
-    Total Nodes: ${totalNodes}
+    Surrounding Nodes:
+    ${surroundingNodesInfo}
+  
+    World Position: x=${worldPosition.x}, y=${worldPosition.y} in a ${worldPosition.totalWidth}x${worldPosition.totalHeight} world.
   
     Consider the following when generating the new node:
-    1. Story progression: This node should logically follow from the previous nodes and advance the overall story.
-    2. Branching choices: Provide 2-5 distinct choices that lead to different story paths.
-    3. Consequences: Each choice should have meaningful consequences that affect the story or the player's status.
-    4. Pacing: Consider the current node's position in the overall story (beginning, middle, or end) and adjust the content accordingly.
-    5. Variety: Introduce unique elements, challenges, or events that make this node interesting and distinct from others.
+    1. Story continuity: The new node should logically follow from the surrounding nodes and overall story context.
+    2. Unique elements: Introduce unique features or events that make this node interesting.
   
     IMPORTANT: Return ONLY a JSON object with the following structure, without any additional text or explanations:
     {
@@ -222,25 +256,14 @@ export async function generateStoryNode(
     }
     
     Provide 2-5 choices, each with at least one consequence. Ensure that the "content" field is always a single string, not an object or nested structure. Do not include any text outside of this JSON structure.`;
-  
-    const response = await aiSend(prompt, "Generate story node");
-    const content = response.choices[0].message.content;
-    
+
     try {
-        JSON.parse(content);
-        return content;
+        const response = await aiSend(prompt, "Generate story node");
+        const content = response.choices[0].message.content;
+        return safeJSONParse(content);
     } catch (error) {
-        const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-        if (jsonMatch && jsonMatch[1]) {
-            try {
-                JSON.parse(jsonMatch[1]);
-                return jsonMatch[1];
-            } catch (innerError) {
-                throw new Error("Failed to parse JSON from code block in AI response");
-            }
-        } else {
-            throw new Error("Failed to extract or parse JSON from AI response");
-        }
+        debug("AI.ts", "Error in generateStoryNode: " + error);
+        throw new Error(`Failed to generate story node: ${error}`);
     }
 }
 
