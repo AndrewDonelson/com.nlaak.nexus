@@ -16,9 +16,10 @@ interface StoryProgressMapProps {
 interface TreeNode {
   id: Id<"storyNodes">;
   children: TreeNode[];
-  content: string;
+  parent: TreeNode | null;
   isVisited: boolean;
   isCurrent: boolean;
+  level: number;
 }
 
 const StoryProgressMap: React.FC<StoryProgressMapProps> = ({ nodes, currentNodeId, visitedNodes, totalNodes }) => {
@@ -35,9 +36,10 @@ const StoryProgressMap: React.FC<StoryProgressMapProps> = ({ nodes, currentNodeI
     nodes.forEach(node => nodeMap.set(node._id, {
       id: node._id,
       children: [],
-      content: node.content,
+      parent: null,
       isVisited: visitedNodes.includes(node._id),
-      isCurrent: node._id === currentNodeId
+      isCurrent: node._id === currentNodeId,
+      level: 0
     }));
   
     nodes.forEach(node => {
@@ -47,19 +49,25 @@ const StoryProgressMap: React.FC<StoryProgressMapProps> = ({ nodes, currentNodeI
           const child = nodeMap.get(choice.nextNodeId);
           if (parent && child) {
             parent.children.push(child);
+            child.parent = parent;
           }
         }
       });
     });
   
     const rootNode = nodes.find(node => !node.parentNodeId);
-    return rootNode ? nodeMap.get(rootNode._id)! : { id: 'root' as Id<"storyNodes">, children: [], content: '', isVisited: false, isCurrent: false };
+    return rootNode ? nodeMap.get(rootNode._id)! : { id: 'root' as Id<"storyNodes">, children: [], parent: null, isVisited: false, isCurrent: false, level: 0 };
   };
 
-  const renderTree = (node: TreeNode, x: number, y: number, level: number): JSX.Element => {
-    const nodeRadius = 5;
-    const horizontalSpacing = 50;
-    const verticalSpacing = 30;
+  const setLevels = (node: TreeNode, level: number) => {
+    node.level = level;
+    node.children.forEach(child => setLevels(child, level + 1));
+  };
+
+  const renderTree = (node: TreeNode, x: number, y: number): JSX.Element => {
+    const nodeRadius = 10;
+    const horizontalSpacing = 80;
+    const verticalSpacing = 60;
 
     const color = node.isCurrent ? 'fill-primary' : node.isVisited ? 'fill-secondary' : 'fill-muted';
 
@@ -71,14 +79,6 @@ const StoryProgressMap: React.FC<StoryProgressMapProps> = ({ nodes, currentNodeI
           r={nodeRadius}
           className={`${color} transition-colors duration-200`}
         />
-        <text
-          x={x}
-          y={y + nodeRadius * 2}
-          textAnchor="middle"
-          className="text-xs fill-current"
-        >
-          {node.content.substring(0, 10)}...
-        </text>
         {node.children.map((child, index) => {
           const childX = x + horizontalSpacing;
           const childY = y + (index - (node.children.length - 1) / 2) * verticalSpacing;
@@ -91,8 +91,9 @@ const StoryProgressMap: React.FC<StoryProgressMapProps> = ({ nodes, currentNodeI
                 y2={childY}
                 stroke="currentColor"
                 strokeOpacity="0.3"
+                strokeWidth="2"
               />
-              {renderTree(child, childX, childY, level + 1)}
+              {renderTree(child, childX, childY)}
             </React.Fragment>
           );
         })}
@@ -100,23 +101,56 @@ const StoryProgressMap: React.FC<StoryProgressMapProps> = ({ nodes, currentNodeI
     );
   };
 
+  const findCurrentNode = (node: TreeNode): TreeNode | null => {
+    if (node.isCurrent) return node;
+    for (const child of node.children) {
+      const found = findCurrentNode(child);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const getVisibleNodes = (currentNode: TreeNode): TreeNode => {
+    let visibleRoot = currentNode;
+    for (let i = 0; i < 2; i++) {
+      if (visibleRoot.parent) visibleRoot = visibleRoot.parent;
+      else break;
+    }
+
+    const pruneDeepNodes = (node: TreeNode, maxDepth: number): TreeNode => {
+      if (node.level - visibleRoot.level > maxDepth) {
+        return { ...node, children: [] };
+      }
+      return {
+        ...node,
+        children: node.children.map(child => pruneDeepNodes(child, maxDepth))
+      };
+    };
+
+    return pruneDeepNodes(visibleRoot, 4); // 2 levels before + current + 2 levels after
+  };
+
   useEffect(() => {
     debug('StoryProgressMap', `Received currentNodeId: ${currentNodeId}`);
     debug('StoryProgressMap', `Received visitedNodes: ${visitedNodes.join(', ')}`);
     debug('StoryProgressMap', `Total nodes: ${nodes.length}`);
-    debug('StoryProgressMap', `Nodes: ${JSON.stringify(nodes, null, 2)}`);
     
     if (svgRef.current && nodes.length > 0) {
-      const tree = buildTree(nodes);
-      debug('StoryProgressMap', `Built tree: ${JSON.stringify(tree, null, 2)}`);
-      const svgContent = renderTree(tree, 20, 100, 0);
-      const svgElement = svgRef.current;
-      
-      if (!rootRef.current) {
-        rootRef.current = createRoot(svgElement);
+      const fullTree = buildTree(nodes);
+      setLevels(fullTree, 0);
+      const currentNode = findCurrentNode(fullTree);
+      if (currentNode) {
+        const visibleTree = getVisibleNodes(currentNode);
+        debug('StoryProgressMap', `Built visible tree structure`);
+        const svgContent = renderTree(visibleTree, 50, 150);
+        const svgElement = svgRef.current;
+        
+        if (!rootRef.current) {
+          rootRef.current = createRoot(svgElement);
+        }
+        
+        rootRef.current.render(svgContent);
       }
-      
-      rootRef.current.render(svgContent);
     }
   }, [nodes, currentNodeId, visitedNodes]);
 
@@ -127,7 +161,7 @@ const StoryProgressMap: React.FC<StoryProgressMapProps> = ({ nodes, currentNodeI
       </CardHeader>
       <CardContent>
         <ScrollArea className="h-[300px]">
-          <svg ref={svgRef} width="100%" height="100%" />
+          <svg ref={svgRef} width="100%" height="100%" viewBox="0 0 600 300" />
         </ScrollArea>
         <div className="mt-4">
           <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
